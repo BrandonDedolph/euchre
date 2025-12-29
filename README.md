@@ -23,12 +23,13 @@ A terminal-based Euchre card game written in Go using the [Bubble Tea](https://g
 
 ### Prerequisites
 
-- Go 1.21 or later
+- [asdf](https://asdf-vm.com/) version manager (recommended) - `make run` will automatically install the correct Go version
+- Or Go 1.21+ installed manually
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/bran/euchre.git
+git clone https://github.com/BrandonDedolph/euchre.git
 cd euchre
 make build
 ```
