@@ -1132,7 +1132,7 @@ func (g *GamePlay) View() string {
 // renderShuffleAnimation renders the deck shuffling animation
 func (g *GamePlay) renderShuffleAnimation(width, height int) string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C41E3A"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render

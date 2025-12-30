@@ -114,7 +114,7 @@ func (c *CardView) renderCompact() string {
 // renderFaceDown renders a face-down card
 func (c *CardView) renderFaceDown() string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C41E3A"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
@@ -252,7 +252,7 @@ func RenderFaceDown(count int) string {
 	}
 
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C41E3A"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
@@ -294,7 +294,7 @@ func RenderFaceDown(count int) string {
 // If reversed is true, cards stack upward (bottoms showing) instead of downward (tops showing)
 func RenderFaceDownVertical(count int, reversed bool) string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C41E3A"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render

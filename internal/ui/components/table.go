@@ -407,7 +407,7 @@ func (t *TableView) renderTurnIndicator() string {
 // renderFlipAnimation renders the card flip animation at given progress (0.0 to 1.0)
 func (t *TableView) renderFlipAnimation(progress float64) string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C41E3A"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
