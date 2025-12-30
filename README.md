@@ -1,6 +1,10 @@
 # Euchre
 
-A terminal-based Euchre card game written in Go using the [Bubble Tea](https://github.com/charmbracelet/bubbletea) TUI framework.
+![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
+
+A terminal-based Euchre card game with AI opponents, built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 ```
     ███████╗██╗   ██╗ ██████╗██╗  ██╗██████╗ ███████╗
@@ -11,130 +15,65 @@ A terminal-based Euchre card game written in Go using the [Bubble Tea](https://g
     ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
 ```
 
-## Features
-
-- **Interactive TUI** - Beautiful terminal interface with card rendering and animations
-- **AI Opponents** - Play against rule-based AI opponents with strategic bidding and play
-- **Learn to Play** - Interactive tutorials covering basics, trump mechanics, bidding, and strategy
-- **Quick Reference** - In-game rules and card rankings reference
-- **Variant Support** - Extensible variants system for different rule sets (standard rules included)
-
-## Installation
-
-### Prerequisites
-
-- [asdf](https://asdf-vm.com/) version manager (recommended) - `make run` will automatically install the correct Go version
-- Or Go 1.21+ installed manually
-
-### Build from Source
+## Quick Start
 
 ```bash
 git clone https://github.com/BrandonDedolph/euchre.git
 cd euchre
-make build
-```
-
-The binary will be created at `bin/euchre`.
-
-## Usage
-
-### Launch the TUI
-
-```bash
-./bin/euchre
-# or
 make run
 ```
 
-### CLI Commands
+## Features
 
-View rules directly from the command line:
-
-```bash
-# General rules overview
-./bin/euchre rules
-
-# Specific rule sections
-./bin/euchre rules trump     # Trump card hierarchy
-./bin/euchre rules scoring   # Scoring rules
-./bin/euchre rules bidding   # Bidding rules
-```
-
-## How to Play Euchre
-
-Euchre is a trick-taking card game for 4 players in 2 teams. Partners sit across from each other.
-
-### The Deck
-
-24 cards: 9, 10, J, Q, K, A of each suit
-
-### Objective
-
-Be the first team to score 10 points by winning tricks.
-
-### Trump Hierarchy
-
-When a suit is trump, cards rank (highest to lowest):
-
-1. **Right Bower** - Jack of trump suit
-2. **Left Bower** - Jack of same color (belongs to trump suit!)
-3. A, K, Q, 10, 9 of trump
-
-### Scoring
-
-| Outcome | Points |
-|---------|--------|
-| Win 3-4 tricks (makers) | 1 point |
-| Win all 5 tricks (march) | 2 points |
-| Win all 5 tricks alone | 4 points |
-| Euchred (makers win < 3) | Defenders get 2 points |
-
-## Development
-
-### Build Commands
-
-```bash
-make build      # Build binary to bin/euchre
-make run        # Run the application
-make test       # Run all tests with verbose output
-make lint       # Run golangci-lint
-make coverage   # Generate test coverage report
-make clean      # Remove build artifacts
-```
-
-### Run a Single Test
-
-```bash
-go test -v -run TestName ./internal/engine/
-```
-
-### Project Structure
-
-```
-├── cmd/euchre/        # Main application entry point
-├── internal/
-│   ├── ai/            # AI player implementations
-│   │   └── rule_based/  # Rule-based AI strategy
-│   ├── app/           # TUI screens (menu, game, tutorials)
-│   ├── engine/        # Core game logic (cards, tricks, rounds)
-│   ├── tutorial/      # Tutorial content and lesson system
-│   ├── ui/            # UI components and theming
-│   │   ├── components/  # Reusable TUI components
-│   │   └── theme/       # Color schemes and styling
-│   └── variants/      # Game rule variants
-│       └── standard/    # Standard Euchre rules
-```
+- **Interactive TUI** - Card rendering, animations, and visual suit selector
+- **AI Opponents** - Rule-based AI with strategic bidding and play
+- **Learn to Play** - Interactive tutorials for beginners
+- **Quick Reference** - In-game rules with visual card examples
 
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| `↑`/`k` | Navigate up |
-| `↓`/`j` | Navigate down |
-| `←`/`h` | Navigate left |
-| `→`/`l` | Navigate right |
-| `Enter`/`Space` | Select |
-| `Esc`/`q` | Back/Quit |
+| `↑↓` or `jk` | Navigate |
+| `←→` or `hl` | Select card/suit |
+| `Enter` | Confirm |
+| `p` | Pass (bidding) |
+| `Esc` | Back/Quit |
+
+## Euchre Basics
+
+4 players, 2 teams, 24 cards (9-A). First to 10 points wins.
+
+**Trump Hierarchy:** Right Bower (J of trump) > Left Bower (J of same color) > A > K > Q > 10 > 9
+
+**Scoring:** 3-4 tricks = 1pt | March (5 tricks) = 2pts | Alone march = 4pts | Euchred = 2pts to defenders
+
+## Development
+
+```bash
+make build      # Build to bin/euchre
+make test       # Run tests
+make lint       # Run linter
+```
+
+<details>
+<summary>Project Structure</summary>
+
+```
+cmd/euchre/          # Entry point
+internal/
+  ai/rule_based/     # AI strategy
+  app/               # TUI screens
+  engine/            # Game logic
+  tutorial/          # Tutorial system
+  ui/components/     # UI components
+  variants/          # Rule variants
+```
+</details>
+
+## Acknowledgments
+
+Built with the [Charm](https://charm.sh) ecosystem: [Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
 ## License
 
