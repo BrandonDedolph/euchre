@@ -115,12 +115,9 @@ func (m *MainMenu) View() string {
 
 	subtitle := theme.Current.Subtitle.Render("Learn and play the classic trick-taking card game")
 
-	// Wrap menu in content box with dynamic size (min 40x8)
-	boxWidth := max(40, width/2)
-	boxHeight := max(8, height/4)
+	// Wrap menu in content box with fixed size
 	menuBox := theme.Current.ContentBox.
-		Width(boxWidth).
-		Height(boxHeight).
+		Width(40).
 		Render(m.menu.Render())
 
 	help := theme.Current.Help.Render("↑/↓ or j/k: Navigate • Enter: Select • Esc: Quit")

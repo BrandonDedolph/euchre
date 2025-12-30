@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/bran/euchre/internal/engine"
 	"github.com/bran/euchre/internal/tutorial"
 	_ "github.com/bran/euchre/internal/tutorial/content" // Register lessons
 	"github.com/bran/euchre/internal/ui/components"
@@ -213,9 +214,11 @@ func (lj *LearningJourney) setupVisualSection() {
 		return
 	}
 
-	// Create visual view
-	boxWidth := max(60, lj.width*2/3)
-	boxHeight := max(12, lj.height/2)
+	// Create visual view - use larger size for trump hierarchy
+	boxWidth, boxHeight := 50, 10
+	if visualSection.Visual.Type == tutorial.VisualTrumpHierarchy {
+		boxWidth, boxHeight = 60, 16
+	}
 	lj.visualView = components.NewLessonVisualView(visualSection.Visual, boxWidth, boxHeight)
 
 	// If the visual has a sequence, set up the animation controller
@@ -256,39 +259,69 @@ func (lj *LearningJourney) View() string {
 }
 
 func (lj *LearningJourney) renderWelcome(width int) string {
+	// Decorative card display - show the four Jacks (the most important cards in Euchre)
+	decorativeCards := []engine.Card{
+		{Suit: engine.Spades, Rank: engine.Jack},
+		{Suit: engine.Hearts, Rank: engine.Jack},
+		{Suit: engine.Diamonds, Rank: engine.Jack},
+		{Suit: engine.Clubs, Rank: engine.Jack},
+	}
+	cardViews := make([]string, len(decorativeCards))
+	for i, card := range decorativeCards {
+		cv := components.NewCardView(card)
+		cardViews[i] = cv.Render()
+	}
+	cardRow := lipgloss.JoinHorizontal(lipgloss.Top, cardViews...)
+
+	// Title with accent
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#3498DB")).
 		Bold(true)
 
-	title := titleStyle.Render("Welcome to Your Euchre Journey")
+	title := titleStyle.Render("Learn to Play Euchre")
 
-	intro := theme.Current.Body.Render(`You're about to learn one of America's
-most beloved card games in a few easy steps.`)
+	// Subtitle/tagline
+	tagline := theme.Current.LessonText.Render("Master America's favorite trick-taking card game")
 
-	// Build lesson list
+	// Lesson list with numbers
 	var lessonList strings.Builder
-	lessonList.WriteString(theme.Current.Subtitle.Render("What you'll learn:") + "\n\n")
+	numberStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#3498DB")).
+		Bold(true)
+	lessonTitleStyle := theme.Current.LessonText
 
-	bulletStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#95A5A6"))
-	for _, lesson := range lj.allLessons {
-		lessonList.WriteString(bulletStyle.Render("  ○ ") + lesson.Title + "\n")
+	for i, lesson := range lj.allLessons {
+		num := numberStyle.Render(string(rune('1'+i)) + ".")
+		lessonList.WriteString("   " + num + " " + lessonTitleStyle.Render(lesson.Title) + "\n")
 	}
 
-	timeEstimate := theme.Current.Muted.Render("Estimated time: ~10 minutes")
+	// Content box for lesson list
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#3498DB")).
+		Padding(1, 2).
+		Render(lessonList.String())
 
+	// Time estimate with icon
+	timeEstimate := theme.Current.Muted.Render("◷ About 10 minutes")
+
+	// Button
 	buttonStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(lipgloss.Color("#3498DB")).
-		Padding(0, 3).
+		Background(lipgloss.Color("#27AE60")).
+		Padding(0, 4).
 		Bold(true)
 
-	button := buttonStyle.Render("Begin Your Journey")
+	button := buttonStyle.Render("▶ Start Learning")
 
-	help := theme.Current.Help.Render("Press Enter to start • Esc to go back")
+	// Help text
+	help := theme.Current.Help.Render("Enter: Start • Esc: Back to menu")
 
-	content := lipgloss.PlaceHorizontal(width, lipgloss.Center, title) + "\n\n" +
-		lipgloss.PlaceHorizontal(width, lipgloss.Center, intro) + "\n\n" +
-		lipgloss.PlaceHorizontal(width, lipgloss.Center, lessonList.String()) + "\n" +
+	// Assemble layout
+	content := lipgloss.PlaceHorizontal(width, lipgloss.Center, cardRow) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, title) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, tagline) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, contentBox) + "\n\n" +
 		lipgloss.PlaceHorizontal(width, lipgloss.Center, timeEstimate) + "\n\n" +
 		lipgloss.PlaceHorizontal(width, lipgloss.Center, button) + "\n\n" +
 		lipgloss.PlaceHorizontal(width, lipgloss.Center, help)
@@ -327,9 +360,9 @@ func (lj *LearningJourney) renderLessonContent(width int) string {
 
 	sectionTitle := sectionTitleStyle.Render(section.Title)
 
-	// Content box with dynamic size (min 60x12)
-	boxWidth := max(60, width*2/3)
-	boxHeight := max(12, lj.height/2)
+	// Content box with fixed size
+	boxWidth := 50
+	boxHeight := 10
 	contentStyle := lipgloss.NewStyle().
 		Width(boxWidth).
 		Height(boxHeight).
@@ -392,7 +425,7 @@ func (lj *LearningJourney) renderVisualLessonContent(width int, lesson *tutorial
 
 	// Text before visual
 	if visualSection.TextBefore != "" {
-		textStyle := theme.Current.Body
+		textStyle := theme.Current.LessonText
 		contentParts = append(contentParts, textStyle.Render(colorizeCards(visualSection.TextBefore)))
 		contentParts = append(contentParts, "")
 	}
@@ -401,8 +434,10 @@ func (lj *LearningJourney) renderVisualLessonContent(width int, lesson *tutorial
 	if visualSection.Visual != nil {
 		// Initialize visual view if needed
 		if lj.visualView == nil || lj.visualView.Element != visualSection.Visual {
-			boxWidth := max(60, width*2/3)
-			boxHeight := max(12, lj.height/2)
+			boxWidth, boxHeight := 50, 10
+			if visualSection.Visual.Type == tutorial.VisualTrumpHierarchy {
+				boxWidth, boxHeight = 60, 16
+			}
 			lj.visualView = components.NewLessonVisualView(visualSection.Visual, boxWidth, boxHeight)
 		}
 		visualContent := lj.visualView.Render()
@@ -412,16 +447,18 @@ func (lj *LearningJourney) renderVisualLessonContent(width int, lesson *tutorial
 
 	// Text after visual
 	if visualSection.TextAfter != "" {
-		textStyle := theme.Current.Body
+		textStyle := theme.Current.LessonText
 		contentParts = append(contentParts, textStyle.Render(colorizeCards(visualSection.TextAfter)))
 	}
 
 	// Join content parts
 	contentText := strings.Join(contentParts, "\n")
 
-	// Content box
-	boxWidth := max(60, width*2/3)
-	boxHeight := max(14, lj.height/2)
+	// Content box - use larger size for trump hierarchy
+	boxWidth, boxHeight := 50, 10
+	if visualSection.Visual != nil && visualSection.Visual.Type == tutorial.VisualTrumpHierarchy {
+		boxWidth, boxHeight = 60, 16
+	}
 	contentStyle := lipgloss.NewStyle().
 		Width(boxWidth).
 		Height(boxHeight).
@@ -484,7 +521,7 @@ func (lj *LearningJourney) renderCompletion(width int) string {
 
 	title := titleStyle.Render("Journey Complete!")
 
-	message := theme.Current.Body.Render(`Congratulations!
+	message := theme.Current.LessonText.Render(`Congratulations!
 
 You've completed all the lessons and
 are ready to play Euchre!`)
