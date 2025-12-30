@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/bran/euchre/internal/ai"
@@ -980,81 +979,6 @@ func (g *GamePlay) View() string {
 		return g.renderShuffleAnimation(width, height)
 	}
 
-	// Score & Tricks cards
-	scores := g.game.Scores()
-
-	// Get tricks for each team
-	var yourTricks, oppTricks int
-	round := g.game.Round()
-	if round != nil {
-		yourTricks = round.TricksWon(0) + round.TricksWon(2) // You + Partner
-		oppTricks = round.TricksWon(1) + round.TricksWon(3)  // West + East
-	}
-
-	// Helper to render trick dots
-	renderTrickDots := func(tricks int) string {
-		filled := "●"
-		empty := "○"
-		result := ""
-		for i := 0; i < 5; i++ {
-			if i < tricks {
-				result += filled
-			} else {
-				result += empty
-			}
-		}
-		return result
-	}
-
-	cardWidth := 15
-
-	// Build score values with optional animation
-	yourScoreStr := fmt.Sprintf("%d pts", scores[0])
-	oppScoreStr := fmt.Sprintf("%d pts", scores[1])
-
-	if g.scoreAnimFrames > 0 {
-		if g.scoreDelta[0] > 0 {
-			yourScoreStr = fmt.Sprintf("%d pts (+%d)", scores[0], g.scoreDelta[0])
-		}
-		if g.scoreDelta[1] > 0 {
-			oppScoreStr = fmt.Sprintf("%d pts (+%d)", scores[1], g.scoreDelta[1])
-		}
-	}
-
-	// Build cards manually with box drawing
-	borderColor := lipgloss.Color("#3498DB")
-	bc := lipgloss.NewStyle().Foreground(borderColor)
-
-	// Card building helper
-	buildCard := func(header, headerColor, score, scoreColor string, tricks int, highlight bool) string {
-		hc := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(headerColor)).Width(cardWidth).Align(lipgloss.Center)
-		sc := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(scoreColor)).Width(cardWidth).Align(lipgloss.Center)
-		if highlight {
-			sc = sc.Background(lipgloss.Color(scoreColor)).Foreground(lipgloss.Color("#FFFFFF"))
-		}
-		dc := lipgloss.NewStyle().Width(cardWidth).Align(lipgloss.Center)
-
-		dots := renderTrickDots(tricks)
-
-		lines := []string{
-			bc.Render("┌" + strings.Repeat("─", cardWidth) + "┐"),
-			bc.Render("│") + hc.Render(header) + bc.Render("│"),
-			bc.Render("├" + strings.Repeat("─", cardWidth) + "┤"),
-			bc.Render("│") + sc.Render(score) + bc.Render("│"),
-			bc.Render("│") + dc.Render(dots) + bc.Render("│"),
-			bc.Render("└" + strings.Repeat("─", cardWidth) + "┘"),
-		}
-		return strings.Join(lines, "\n")
-	}
-
-	yourHighlight := g.scoreAnimFrames > 0 && g.scoreDelta[0] > 0
-	oppHighlight := g.scoreAnimFrames > 0 && g.scoreDelta[1] > 0
-
-	yourCard := buildCard("YOUR TEAM", "#2ECC71", yourScoreStr, "#2ECC71", yourTricks, yourHighlight)
-	oppCard := buildCard("OPPONENTS", "#E74C3C", oppScoreStr, "#E74C3C", oppTricks, oppHighlight)
-
-	scoreStr := lipgloss.JoinHorizontal(lipgloss.Top, yourCard, "  ", oppCard)
-
 	// Table view
 	tableStr := g.tableView.Render()
 
@@ -1142,7 +1066,7 @@ func (g *GamePlay) View() string {
 	// Fixed height for hand area (1 name + 3 tricks table + 1 blank + 5 cards + 1 raised = 11)
 	handStr = lipgloss.NewStyle().Height(11).Render(handStr)
 
-	// Phase indicator and message
+	// Build status bar with phase message (trump info now in side panel)
 	phaseStr := g.getPhaseMessage()
 	if g.message != "" {
 		// If it's the human's turn during bidding, combine the AI's message with the prompt
@@ -1158,10 +1082,25 @@ func (g *GamePlay) View() string {
 	// Help text
 	helpStr := g.getHelpText()
 
-	innerContent := scoreStr + "\n\n" +
-		tableStr + "\n" +
-		handStr + "\n\n" +
-		theme.Current.Accent.Render(phaseStr) + "\n\n" +
+	// Build center content (table + hand)
+	// Center the hand to match table width
+	tableWidth := lipgloss.Width(tableStr)
+	centeredHand := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, handStr)
+	centerContent := tableStr + centeredHand
+
+	// Get height of center content for side panels
+	centerHeight := lipgloss.Height(centerContent)
+
+	// Create side panels
+	leftPanel := g.renderLeftPanel(centerHeight)
+	rightPanel := g.renderRightPanel(centerHeight)
+
+	// Join horizontally: left panel | center | right panel
+	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, centerContent, rightPanel)
+
+	// Build final layout
+	innerContent := mainArea + "\n" +
+		theme.Current.Accent.Render(phaseStr) + "\n" +
 		theme.Current.Help.Render(helpStr)
 
 	// Add celebration overlay if active
@@ -1335,6 +1274,140 @@ func (g *GamePlay) getHelpText() string {
 	default:
 		return "Esc: Return to menu"
 	}
+}
+
+// renderLeftPanel renders the left side panel with your team info
+func (g *GamePlay) renderLeftPanel(height int) string {
+	scores := g.game.Scores()
+	var yourTricks int
+	round := g.game.Round()
+	if round != nil {
+		yourTricks = round.TricksWon(0) + round.TricksWon(2)
+	}
+
+	// Trick dots
+	dots := ""
+	for i := 0; i < 5; i++ {
+		if i < yourTricks {
+			dots += "●"
+		} else {
+			dots += "○"
+		}
+	}
+
+	// Build panel content
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71")).Bold(true)
+	scoreStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71"))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+
+	// Score with animation
+	scoreStr := fmt.Sprintf("%d", scores[0])
+	if g.scoreAnimFrames > 0 && g.scoreDelta[0] > 0 {
+		scoreStr = fmt.Sprintf("%d(+%d)", scores[0], g.scoreDelta[0])
+		scoreStyle = scoreStyle.Background(lipgloss.Color("#2ECC71")).Foreground(lipgloss.Color("#FFF"))
+	}
+
+	lines := []string{
+		headerStyle.Render("  YOU  "),
+		"",
+		scoreStyle.Render(scoreStr + " pts"),
+		"",
+		mutedStyle.Render("Tricks"),
+		dots,
+		"",
+		mutedStyle.Render(fmt.Sprintf("Round %d", g.tableView.RoundNumber)),
+	}
+
+	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
+
+	// Style with fixed width and height, right border
+	style := lipgloss.NewStyle().
+		Width(12).
+		Height(height).
+		Align(lipgloss.Center).
+		BorderRight(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#3498DB"))
+
+	return style.Render(content)
+}
+
+// renderRightPanel renders the right side panel with opponent/trump info
+func (g *GamePlay) renderRightPanel(height int) string {
+	scores := g.game.Scores()
+	var oppTricks int
+	round := g.game.Round()
+	if round != nil {
+		oppTricks = round.TricksWon(1) + round.TricksWon(3)
+	}
+
+	// Trick dots
+	dots := ""
+	for i := 0; i < 5; i++ {
+		if i < oppTricks {
+			dots += "●"
+		} else {
+			dots += "○"
+		}
+	}
+
+	// Build panel content
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
+	scoreStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C"))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+
+	// Score with animation
+	scoreStr := fmt.Sprintf("%d", scores[1])
+	if g.scoreAnimFrames > 0 && g.scoreDelta[1] > 0 {
+		scoreStr = fmt.Sprintf("%d(+%d)", scores[1], g.scoreDelta[1])
+		scoreStyle = scoreStyle.Background(lipgloss.Color("#E74C3C")).Foreground(lipgloss.Color("#FFF"))
+	}
+
+	// Trump display with filled background
+	trumpLabel := mutedStyle.Render("Trump")
+	trumpStr := ""
+	if g.tableView.Trump != engine.NoSuit {
+		// Use filled background matching card color
+		var bgColor, fgColor lipgloss.Color
+		if g.tableView.Trump == engine.Hearts || g.tableView.Trump == engine.Diamonds {
+			bgColor = lipgloss.Color("#E74C3C") // Red
+			fgColor = lipgloss.Color("#FFFFFF")
+		} else {
+			bgColor = lipgloss.Color("#2C3E50") // Dark
+			fgColor = lipgloss.Color("#FFFFFF")
+		}
+		trumpStyle := lipgloss.NewStyle().
+			Bold(true).
+			Background(bgColor).
+			Foreground(fgColor).
+			Padding(0, 1)
+		trumpStr = trumpStyle.Render(g.tableView.Trump.Symbol() + " " + g.tableView.Trump.String())
+	}
+
+	lines := []string{
+		headerStyle.Render("  OPP  "),
+		"",
+		scoreStyle.Render(scoreStr + " pts"),
+		"",
+		mutedStyle.Render("Tricks"),
+		dots,
+		"",
+		trumpLabel,
+		trumpStr,
+	}
+
+	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
+
+	// Style with fixed width and height, left border
+	style := lipgloss.NewStyle().
+		Width(12).
+		Height(height).
+		Align(lipgloss.Center).
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#3498DB"))
+
+	return style.Render(content)
 }
 
 // Messages for async operations

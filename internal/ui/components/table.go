@@ -73,11 +73,12 @@ func (t *TableView) Render() string {
 	sb.WriteString(t.renderMiddle())
 	sb.WriteString("\n")
 
-	// Trump indicator
-	sb.WriteString(t.renderTrumpIndicator())
-	sb.WriteString("\n")
-
 	return sb.String()
+}
+
+// RenderTrumpIndicator exposes the trump indicator for external use
+func (t *TableView) RenderTrumpIndicator() string {
+	return t.renderTrumpIndicator()
 }
 
 // RenderTricksTable renders a small 1x2 table for tricks
@@ -154,31 +155,35 @@ func (t *TableView) renderSidePlayer(playerIdx int, isLeft bool) string {
 		indicator = t.renderTurnIndicator()
 	}
 
-	dealerBadge := ""
-	if t.Dealer == playerIdx {
-		dealerStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#000")).
-			Background(lipgloss.Color("#f1c40f")).
-			Bold(true)
-		dealerBadge = "\n" + dealerStyle.Render("DEALER")
-	}
-
-	header := fmt.Sprintf("%s%s%s", name, indicator, dealerBadge)
-	tricksTable := RenderTricksTable(tricks)
+	// Compact header with inline tricks
+	tricksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	header := fmt.Sprintf("%s%s", name, indicator)
+	tricksStr := tricksStyle.Render(fmt.Sprintf("(%d)", tricks))
 
 	// Render vertical face-down cards (West is reversed)
 	cardDisplay := RenderFaceDownVertical(min(cards, 5), isLeft)
 
 	// Build the side player display
 	var sb strings.Builder
+
+	// Show DEALER on separate line above name if this player is dealer
+	if t.Dealer == playerIdx {
+		dealerStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#000")).
+			Background(lipgloss.Color("#f1c40f")).
+			Bold(true)
+		sb.WriteString(dealerStyle.Render("DEALER"))
+		sb.WriteString("\n")
+	}
+
 	sb.WriteString(header)
-	sb.WriteString("\n")
-	sb.WriteString(tricksTable)
+	sb.WriteString(" ")
+	sb.WriteString(tricksStr)
 	sb.WriteString("\n")
 	sb.WriteString(cardDisplay)
 
 	// Fixed width and height to prevent layout shift
-	style := lipgloss.NewStyle().Width(14).Height(16)
+	style := lipgloss.NewStyle().Width(14).Height(12)
 	if isLeft {
 		style = style.Align(lipgloss.Right)
 	} else {
