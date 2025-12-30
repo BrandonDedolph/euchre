@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/bran/euchre/internal/ui/theme"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // MenuItem represents a menu option
@@ -69,23 +70,18 @@ func (m *Menu) Render() string {
 		sb.WriteString("\n\n")
 	}
 
-	// Fixed description area at top (always 2 lines to prevent layout shift)
+	// Fixed description area at top (fixed size to prevent layout shift)
+	descStyle := lipgloss.NewStyle().
+		Width(38).
+		Height(2).
+		Foreground(theme.Current.Subtitle.GetForeground())
+
+	desc := ""
 	if m.Selected >= 0 && m.Selected < len(m.Items) {
-		desc := m.Items[m.Selected].Description
-		if desc != "" {
-			lines := strings.Split(desc, "\n")
-			sb.WriteString(theme.Current.Subtitle.Render(lines[0]))
-			sb.WriteString("\n")
-			if len(lines) > 1 {
-				sb.WriteString(theme.Current.Subtitle.Render(lines[1]))
-			} else {
-				sb.WriteString(" ") // Empty second line
-			}
-			sb.WriteString("\n\n")
-		} else {
-			sb.WriteString(" \n \n\n") // Empty 2-line placeholder
-		}
+		desc = m.Items[m.Selected].Description
 	}
+	sb.WriteString(descStyle.Render(desc))
+	sb.WriteString("\n\n")
 
 	for i, item := range m.Items {
 		var line string
