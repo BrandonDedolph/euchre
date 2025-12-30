@@ -1131,36 +1131,78 @@ func (g *GamePlay) View() string {
 
 // renderShuffleAnimation renders the deck shuffling animation
 func (g *GamePlay) renderShuffleAnimation(width, height int) string {
-	// Simple cut & merge with tall back cards
-	frames := []string{
-		// Start - single deck with depth
-		"┌─────┐┐\n│░░░░░││\n│░░░░░││\n│░░░░░││\n└─────┘┘",
-		// Thicken
-		"┌─────┐┐┐\n│░░░░░│││\n│░░░░░│││\n│░░░░░│││\n└─────┘┘┘",
-		// Full thickness
-		"┌─────┐┐┐┐\n│░░░░░││││\n│░░░░░││││\n│░░░░░││││\n└─────┘┘┘┘",
-		// Cut - split
-		"┌─────┐┐    ┌─────┐┐\n│░░░░░││    │░░░░░││\n│░░░░░││    │░░░░░││\n│░░░░░││    │░░░░░││\n└─────┘┘    └─────┘┘",
-		// Wide split
-		"┌─────┐┐      ┌─────┐┐\n│░░░░░││      │░░░░░││\n│░░░░░││      │░░░░░││\n│░░░░░││      │░░░░░││\n└─────┘┘      └─────┘┘",
-		// Coming together
-		"┌─────┐┐ ┌─────┐┐\n│░░░░░││ │░░░░░││\n│░░░░░││ │░░░░░││\n│░░░░░││ │░░░░░││\n└─────┘┘ └─────┘┘",
-		// Merged
-		"┌─────┐┐┐┐┐\n│░░░░░│││││\n│░░░░░│││││\n│░░░░░│││││\n└─────┘┘┘┘┘",
-		// Settling
-		"┌─────┐┐┐┐\n│░░░░░││││\n│░░░░░││││\n│░░░░░││││\n└─────┘┘┘┘",
-		// More settling
-		"┌─────┐┐┐\n│░░░░░│││\n│░░░░░│││\n│░░░░░│││\n└─────┘┘┘",
-		// Almost done
-		"┌─────┐┐\n│░░░░░││\n│░░░░░││\n│░░░░░││\n└─────┘┘",
-		// Final
-		"┌─────┐\n│░░░░░│\n│░░░░░│\n│░░░░░│\n└─────┘",
-		// Done - highlight
-		"┌─────┐\n│▓▓▓▓▓│\n│▓▓▓▓▓│\n│▓▓▓▓▓│\n└─────┘",
+	borderStyle := theme.Current.Muted
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+
+	border := borderStyle.Render
+	pattern := patternStyle.Render
+
+	// Helper to build a deck frame with colored crosshatch
+	// p = pattern interior, d = depth chars (border colored)
+	buildDeck := func(p string, depth int) string {
+		depthStr := border(repeatChar('┐', depth))
+		depthPipe := border(repeatChar('│', depth))
+		depthBot := border(repeatChar('┘', depth))
+
+		return border("┌─────┐") + depthStr + "\n" +
+			border("│") + pattern(p) + border("│") + depthPipe + "\n" +
+			border("│") + pattern(p) + border("│") + depthPipe + "\n" +
+			border("│") + pattern(p) + border("│") + depthPipe + "\n" +
+			border("└─────┘") + depthBot
 	}
 
-	frame := g.shuffleStep % len(frames)
-	deckArt := frames[frame]
+	buildSplitDecks := func(p string, depth int, gap string) string {
+		depthStr := border(repeatChar('┐', depth))
+		depthPipe := border(repeatChar('│', depth))
+		depthBot := border(repeatChar('┘', depth))
+
+		deck := border("┌─────┐") + depthStr
+		row := border("│") + pattern(p) + border("│") + depthPipe
+		bot := border("└─────┘") + depthBot
+
+		return deck + gap + deck + "\n" +
+			row + gap + row + "\n" +
+			row + gap + row + "\n" +
+			row + gap + row + "\n" +
+			bot + gap + bot
+	}
+
+	// Animation frames
+	var deckArt string
+	frameNum := g.shuffleStep % 12
+
+	switch frameNum {
+	case 0: // Start - single deck with depth
+		deckArt = buildDeck("╳╳╳╳╳", 1)
+	case 1: // Thicken
+		deckArt = buildDeck("╳╳╳╳╳", 2)
+	case 2: // Full thickness
+		deckArt = buildDeck("╳╳╳╳╳", 3)
+	case 3: // Cut - split
+		deckArt = buildSplitDecks("╳╳╳╳╳", 1, "    ")
+	case 4: // Wide split
+		deckArt = buildSplitDecks("╳╳╳╳╳", 1, "      ")
+	case 5: // Coming together
+		deckArt = buildSplitDecks("╳╳╳╳╳", 1, " ")
+	case 6: // Merged
+		deckArt = buildDeck("╳╳╳╳╳", 4)
+	case 7: // Settling
+		deckArt = buildDeck("╳╳╳╳╳", 3)
+	case 8: // More settling
+		deckArt = buildDeck("╳╳╳╳╳", 2)
+	case 9: // Almost done
+		deckArt = buildDeck("╳╳╳╳╳", 1)
+	case 10: // Final
+		deckArt = buildDeck("╳╳╳╳╳", 0)
+	case 11: // Done - highlight (brighter pattern)
+		highlightPattern := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
+		hp := highlightPattern.Render
+		deckArt = border("┌─────┐") + "\n" +
+			border("│") + hp("╳╳╳╳╳") + border("│") + "\n" +
+			border("│") + hp("╳╳╳╳╳") + border("│") + "\n" +
+			border("│") + hp("╳╳╳╳╳") + border("│") + "\n" +
+			border("└─────┘")
+	}
 
 	// Animate the title
 	titles := []string{
@@ -1175,7 +1217,7 @@ func (g *GamePlay) renderShuffleAnimation(width, height int) string {
 		Bold(true).
 		Render(titles[titleFrame])
 
-	content := title + "\n\n" + theme.Current.Muted.Render(deckArt)
+	content := title + "\n\n" + deckArt
 
 	centeredContent := lipgloss.Place(width-4, height-4, lipgloss.Center, lipgloss.Center, content)
 	screenBox := theme.Current.ScreenBorder.
@@ -1184,6 +1226,18 @@ func (g *GamePlay) renderShuffleAnimation(width, height int) string {
 		Render(centeredContent)
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, screenBox)
+}
+
+// repeatChar repeats a rune n times
+func repeatChar(r rune, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	result := make([]rune, n)
+	for i := range result {
+		result[i] = r
+	}
+	return string(result)
 }
 
 // addCelebrationEffect adds confetti-like decorations to the content
