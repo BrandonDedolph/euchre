@@ -63,6 +63,9 @@ type GamePlay struct {
 	turnPulseFrame    int    // Frame counter for turn indicator pulse
 	celebrationFrames int    // Frames remaining for winner celebration
 	cardFlipFrames    int    // Frames remaining for card flip reveal
+
+	// Suit selector for bidding round 2
+	suitSelector *components.SuitSelector
 }
 
 // NewGamePlay creates a new game play screen
@@ -475,34 +478,26 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	canSelectCard := (phase == engine.PhaseDiscard || phase == engine.PhasePlay) &&
 		g.game.CurrentPlayer() == g.humanPlayer
 
+	// Initialize suit selector for round 2 bidding if needed
+	if phase == engine.PhaseBidRound2 && g.game.CurrentPlayer() == g.humanPlayer && g.suitSelector == nil {
+		g.suitSelector = components.NewSuitSelector(g.game.TurnedCard().Suit)
+	}
+
 	switch msg.String() {
 	case "q", "esc":
 		return g, Navigate(ScreenMainMenu)
 
-	case "left":
-		if canSelectCard && g.selectedCard > 0 {
-			g.selectedCard--
-		}
-
-	case "right":
-		if canSelectCard {
-			hand := g.game.Hand(g.humanPlayer)
-			if g.selectedCard < len(hand)-1 {
-				g.selectedCard++
-			}
-		}
-
-	case "h":
-		// vim left during card selection, hearts during round 2 bidding
-		if phase == engine.PhaseBidRound2 {
-			return g.handleCallSuit(engine.Hearts, false)
+	case "left", "h":
+		if phase == engine.PhaseBidRound2 && g.suitSelector != nil && g.game.CurrentPlayer() == g.humanPlayer {
+			g.suitSelector.MoveLeft()
 		} else if canSelectCard && g.selectedCard > 0 {
 			g.selectedCard--
 		}
 
-	case "l":
-		// vim right during card selection
-		if canSelectCard {
+	case "right", "l":
+		if phase == engine.PhaseBidRound2 && g.suitSelector != nil && g.game.CurrentPlayer() == g.humanPlayer {
+			g.suitSelector.MoveRight()
+		} else if canSelectCard {
 			hand := g.game.Hand(g.humanPlayer)
 			if g.selectedCard < len(hand)-1 {
 				g.selectedCard++
@@ -521,7 +516,7 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return g.handleAlone()
 
 	case "c":
-		// Call clubs in round 2
+		// Call clubs in round 2 (keep keyboard shortcuts as alternative)
 		return g.handleCallSuit(engine.Clubs, false)
 
 	case "d":
@@ -560,10 +555,11 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 		}
 
 	case engine.PhaseBidRound2:
-		// Call trump (simplified - just pick a suit)
-		// For now, auto-select based on hand
-		hand := g.game.Hand(g.humanPlayer)
-		suit := g.selectBestTrump(hand, g.game.TurnedCard().Suit)
+		// Use suit selector to call trump
+		if g.suitSelector == nil {
+			g.suitSelector = components.NewSuitSelector(g.game.TurnedCard().Suit)
+		}
+		suit := g.suitSelector.SelectedSuit()
 		action := engine.CallTrumpAction{
 			PlayerIdx: g.humanPlayer,
 			Suit:      suit,
@@ -573,6 +569,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = fmt.Sprintf("You called %s!", suit)
+			g.suitSelector = nil // Reset for next time
 			g.updateTableView()
 		}
 
@@ -729,8 +726,9 @@ func (g *GamePlay) handleCallSuit(suit engine.Suit, alone bool) (tea.Model, tea.
 	}
 
 	g.message = fmt.Sprintf("You called %s!", suit)
+	g.suitSelector = nil // Reset suit selector
 	g.updateTableView()
-	return g, nil
+	return g, g.processAITurns()
 }
 
 // processAITurns processes a single AI player turn and returns a message to continue
@@ -904,6 +902,7 @@ func (g *GamePlay) updateTableView() {
 	g.tableView.Maker = round.Maker()
 	g.tableView.MakerAlone = round.IsAlone()
 	g.tableView.TurnPulseFrame = g.turnPulseFrame
+	g.tableView.RoundNumber = len(g.game.RoundHistory()) + 1 // Current round = completed rounds + 1
 
 	// Update player hand counts
 	for i := 0; i < 4; i++ {
@@ -1151,8 +1150,15 @@ func (g *GamePlay) View() string {
 	// Help text
 	helpStr := g.getHelpText()
 
+	// Suit selector for bidding round 2
+	suitSelectorStr := ""
+	if g.game.Phase() == engine.PhaseBidRound2 && g.game.CurrentPlayer() == g.humanPlayer && g.suitSelector != nil {
+		suitSelectorStr = "\n" + lipgloss.PlaceHorizontal(60, lipgloss.Center, g.suitSelector.Render()) + "\n"
+	}
+
 	innerContent := scoreStr + "\n\n" +
 		tableStr + "\n" +
+		suitSelectorStr +
 		handStr + "\n\n" +
 		theme.Current.Accent.Render(phaseStr) + "\n\n" +
 		theme.Current.Help.Render(helpStr)
@@ -1328,7 +1334,7 @@ func (g *GamePlay) getHelpText() string {
 	case engine.PhaseBidRound1:
 		return "Enter: Order up • P: Pass • A: Order up alone • Esc: Quit"
 	case engine.PhaseBidRound2:
-		return "C/D/H/S: Call suit • P: Pass • Esc: Quit"
+		return "←/→: Select suit • Enter: Call • P: Pass • Esc: Quit"
 	case engine.PhaseDiscard:
 		return "←/→: Select card • Enter: Discard • Esc: Quit"
 	case engine.PhasePlay:

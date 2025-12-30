@@ -40,6 +40,7 @@ type TableView struct {
 	Maker          int  // Player who called trump (-1 if none)
 	MakerAlone     bool // Whether maker is going alone
 	TurnPulseFrame int  // Animation frame for turn indicator pulse
+	RoundNumber    int  // Current round number (1-based)
 
 	// Animation states
 	CardPlayAnim     *CardPlayAnim     // Card being played animation
@@ -185,67 +186,11 @@ func (t *TableView) renderSidePlayer(playerIdx int, isLeft bool) string {
 	return style.Render(sb.String())
 }
 
-// renderTrickArea renders the center area with played cards
+// renderTrickArea renders the center area with trump card in center and played cards around it
 func (t *TableView) renderTrickArea() string {
-	// Player border colors for card attribution
-	playerColors := []lipgloss.Color{
-		lipgloss.Color("#2ecc71"), // You - Green
-		lipgloss.Color("#3498db"), // West - Blue
-		lipgloss.Color("#1abc9c"), // Partner - Cyan
-		lipgloss.Color("#9b59b6"), // East - Magenta
-	}
-
-	_ = playerColors // Keep for potential future use
-
-	cardWidth := 11  // Card width with border
-	totalWidth := cardWidth*3 + 4
-
-	// During bidding, show the turned card in the center
-	if t.Trump == engine.NoSuit && t.TurnedCard.Suit != engine.NoSuit && len(t.CurrentTrick) == 0 {
-		var turnedCard string
-		if t.CardFlipFrames > 0 && t.CardFlipTotal > 0 {
-			// Show card flip animation
-			progress := float64(t.CardFlipTotal-t.CardFlipFrames) / float64(t.CardFlipTotal)
-			turnedCard = t.renderFlipAnimation(progress)
-		} else {
-			cv := NewCardView(t.TurnedCard)
-			turnedCard = cv.Render()
-		}
-
-		// Empty placeholder for surrounding positions
-		placeholder := lipgloss.NewStyle().
-			Width(7).
-			Height(5).
-			Render("")
-
-		// Top row (empty)
-		topRow := lipgloss.PlaceHorizontal(totalWidth, lipgloss.Center, placeholder)
-
-		// Wrap turned card in fixed height to prevent layout shift
-		turnedCard = lipgloss.NewStyle().Height(5).Render(turnedCard)
-
-		// Middle row with turned card in center
-		middleRow := lipgloss.JoinHorizontal(lipgloss.Center,
-			placeholder,
-			lipgloss.NewStyle().Width(4).Render(""), // spacing
-			turnedCard,
-			lipgloss.NewStyle().Width(4).Render(""), // spacing
-			placeholder,
-		)
-
-		// Bottom row (empty)
-		bottomRow := lipgloss.PlaceHorizontal(totalWidth, lipgloss.Center, placeholder)
-
-		content := lipgloss.JoinVertical(lipgloss.Center, topRow, middleRow, bottomRow)
-
-		// Outer border
-		style := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#3498DB")).
-			Padding(0, 1)
-
-		return style.Render(content)
-	}
+	cardWidth := 7  // Card width
+	cardHeight := 5 // Card height
+	totalWidth := cardWidth*3 + 8 // 3 cards + spacing
 
 	// Render each player's card (or empty placeholder)
 	renderCard := func(playerIdx int) string {
@@ -263,8 +208,8 @@ func (t *TableView) renderTrickArea() string {
 					if progress > 0.75 {
 						// Almost done - show placeholder
 						return lipgloss.NewStyle().
-							Width(7).
-							Height(5).
+							Width(cardWidth).
+							Height(cardHeight).
 							Render("")
 					} else if progress > 0.5 {
 						// Fading - show dimmed card
@@ -287,40 +232,60 @@ func (t *TableView) renderTrickArea() string {
 		}
 		// Empty placeholder (same size as card)
 		placeholder := lipgloss.NewStyle().
-			Width(7).
-			Height(5).
-			Align(lipgloss.Center, lipgloss.Center).
+			Width(cardWidth).
+			Height(cardHeight).
 			Render("")
 		return placeholder
 	}
 
-	topCard := renderCard(2)    // Partner
-	leftCard := renderCard(1)   // West
-	rightCard := renderCard(3)  // East
-	bottomCard := renderCard(0) // You
+	// Render the center trump card
+	renderCenterCard := func() string {
+		if t.TurnedCard.Suit == engine.NoSuit {
+			// No turned card yet
+			return lipgloss.NewStyle().
+				Width(cardWidth).
+				Height(cardHeight).
+				Render("")
+		}
 
-	// Build layout:
-	//        [Partner]
-	// [West]           [East]
-	//        [You]
+		// Show card flip animation if active
+		if t.CardFlipFrames > 0 && t.CardFlipTotal > 0 {
+			progress := float64(t.CardFlipTotal-t.CardFlipFrames) / float64(t.CardFlipTotal)
+			return t.renderFlipAnimation(progress)
+		}
 
-	cardHeight := 5 // Fixed card height
+		cv := NewCardView(t.TurnedCard)
+		return cv.Render()
+	}
 
-	// Top row (Partner's card centered) - fixed height
+	topCard := renderCard(2)      // Partner
+	leftCard := renderCard(1)     // West
+	centerCard := renderCenterCard() // Trump card
+	rightCard := renderCard(3)    // East
+	bottomCard := renderCard(0)   // You
+
+	// Build layout with trump card in center:
+	//           [Partner]
+	// [West]  [TrumpCard]  [East]
+	//            [You]
+
+	// Top row (Partner's card centered)
 	topRow := lipgloss.NewStyle().Height(cardHeight).Render(
 		lipgloss.PlaceHorizontal(totalWidth, lipgloss.Center, topCard),
 	)
 
-	// Middle row (West and East cards on sides) - fixed height
+	// Middle row (West, Trump, East)
 	middleRow := lipgloss.NewStyle().Height(cardHeight).Render(
 		lipgloss.JoinHorizontal(lipgloss.Center,
 			leftCard,
-			lipgloss.NewStyle().Width(cardWidth+4).Render(""),
+			"  ",
+			centerCard,
+			"  ",
 			rightCard,
 		),
 	)
 
-	// Bottom row (Your card centered) - fixed height
+	// Bottom row (Your card centered)
 	bottomRow := lipgloss.NewStyle().Height(cardHeight).Render(
 		lipgloss.PlaceHorizontal(totalWidth, lipgloss.Center, bottomCard),
 	)
@@ -336,35 +301,49 @@ func (t *TableView) renderTrickArea() string {
 	return style.Render(content)
 }
 
-// renderTrumpIndicator shows the current trump and who called it
+// renderTrumpIndicator shows the current trump, round number, and who called it
 func (t *TableView) renderTrumpIndicator() string {
-	if t.Trump == engine.NoSuit {
-		if t.TurnedCard.Suit != engine.NoSuit {
-			// Card is shown visually in trick area, just show text label here
-			return "Bidding in progress..."
-		}
-		return "Trump not selected"
+	var parts []string
+
+	// Round number
+	if t.RoundNumber > 0 {
+		roundStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#3498DB")).
+			Bold(true)
+		parts = append(parts, roundStyle.Render(fmt.Sprintf("Round %d", t.RoundNumber)))
 	}
 
+	if t.Trump == engine.NoSuit {
+		if t.TurnedCard.Suit != engine.NoSuit {
+			parts = append(parts, theme.Current.Muted.Render("Bidding..."))
+		} else {
+			parts = append(parts, theme.Current.Muted.Render("Dealing..."))
+		}
+		return strings.Join(parts, "  •  ")
+	}
+
+	// Trump suit
 	trumpStyle := theme.Current.CardBlack
 	if t.Trump == engine.Hearts || t.Trump == engine.Diamonds {
 		trumpStyle = theme.Current.CardRed
 	}
+	parts = append(parts, fmt.Sprintf("Trump: %s", trumpStyle.Render(t.Trump.Symbol()+" "+t.Trump.String())))
 
-	trumpStr := fmt.Sprintf("Trump: %s", trumpStyle.Render(t.Trump.Symbol()+" "+t.Trump.String()))
-
-	// Show who called trump
-	if t.Maker >= 0 && t.Maker < len(t.PlayerNames) {
-		makerName := t.PlayerNames[t.Maker]
-		makerInfo := fmt.Sprintf(" (called by %s", makerName)
-		if t.MakerAlone {
-			makerInfo += ", going alone"
-		}
-		makerInfo += ")"
-		trumpStr += theme.Current.Muted.Render(makerInfo)
+	// Going alone indicator
+	if t.MakerAlone {
+		aloneStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E67E22")).
+			Bold(true)
+		parts = append(parts, aloneStyle.Render("ALONE"))
 	}
 
-	return trumpStr
+	// Who called trump
+	if t.Maker >= 0 && t.Maker < len(t.PlayerNames) {
+		makerName := t.PlayerNames[t.Maker]
+		parts = append(parts, theme.Current.Muted.Render(fmt.Sprintf("(%s)", makerName)))
+	}
+
+	return strings.Join(parts, "  •  ")
 }
 
 // min returns the minimum of two integers
