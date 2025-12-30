@@ -69,12 +69,21 @@ func (m *Menu) Render() string {
 		sb.WriteString("\n\n")
 	}
 
-	// Fixed description area at top
+	// Fixed description area at top (always 2 lines to prevent layout shift)
 	if m.Selected >= 0 && m.Selected < len(m.Items) {
 		desc := m.Items[m.Selected].Description
 		if desc != "" {
-			sb.WriteString(theme.Current.Subtitle.Render(desc))
+			lines := strings.Split(desc, "\n")
+			sb.WriteString(theme.Current.Subtitle.Render(lines[0]))
+			sb.WriteString("\n")
+			if len(lines) > 1 {
+				sb.WriteString(theme.Current.Subtitle.Render(lines[1]))
+			} else {
+				sb.WriteString(" ") // Empty second line
+			}
 			sb.WriteString("\n\n")
+		} else {
+			sb.WriteString(" \n \n\n") // Empty 2-line placeholder
 		}
 	}
 
