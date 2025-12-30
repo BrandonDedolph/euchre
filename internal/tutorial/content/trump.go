@@ -1,12 +1,16 @@
 package content
 
-import "github.com/bran/euchre/internal/tutorial"
+import (
+	"github.com/bran/euchre/internal/engine"
+	"github.com/bran/euchre/internal/tutorial"
+)
 
 func init() {
 	registerTrumpLessons()
 }
 
 func registerTrumpLessons() {
+	// Lesson 5: The Bower System
 	tutorial.Register(&tutorial.Lesson{
 		ID:            "rules-1",
 		Title:         "The Bower System",
@@ -14,61 +18,61 @@ func registerTrumpLessons() {
 		Category:      tutorial.CategoryRules,
 		Order:         5,
 		Prerequisites: []string{"basics-4"},
-		Sections: []tutorial.Section{
+		VisualSections: []tutorial.VisualSection{
 			{
-				Type:  tutorial.SectionText,
-				Title: "Right Bower - The Highest Card",
-				Content: `The Jack of the trump suit is called the "Right Bower"
-and it's the HIGHEST card in the game.
-
-Example: If Hearts is trump:
-  J♥ = Right Bower = Highest card!
-
-Nothing beats the Right Bower. If you have it, you have
-a guaranteed trick winner.`,
+				Title:      "Right Bower",
+				TextBefore: "The Jack of trump is the HIGHEST card in the game!",
+				Visual: tutorial.NewSingleCardVisual(
+					engine.Card{Suit: engine.Hearts, Rank: engine.Jack},
+					"Right Bower - HIGHEST",
+					engine.Hearts,
+				),
+				TextAfter: "When Hearts is trump, J♥ beats everything.",
 			},
 			{
-				Type:  tutorial.SectionText,
-				Title: "Left Bower - The Second Highest",
-				Content: `Here's where Euchre gets interesting!
-
-The Jack of the SAME COLOR as trump becomes the "Left Bower"
-and is the second-highest card.
-
-Color pairs:
-  ♥ Hearts (red) ↔ ♦ Diamonds (red)
-  ♠ Spades (black) ↔ ♣ Clubs (black)
-
-Example: If Hearts is trump:
-  J♥ = Right Bower (highest)
-  J♦ = Left Bower (second highest)
-
-The Left Bower BELONGS to the trump suit during play!
-If someone leads hearts and you have J♦, you must play it!`,
+				Title:      "Left Bower",
+				TextBefore: "The Jack of the same COLOR is the second-highest!",
+				Visual: &tutorial.VisualElement{
+					Type: tutorial.VisualCardComparison,
+					Cards: []engine.Card{
+						{Suit: engine.Hearts, Rank: engine.Jack},
+						{Suit: engine.Diamonds, Rank: engine.Jack},
+					},
+					Trump:      engine.Hearts,
+					LeftLabel:  "Right Bower",
+					RightLabel: "Left Bower",
+					Caption:    "Hearts & Diamonds are both red",
+					Annotations: []tutorial.CardAnnotation{
+						{CardIndex: 0, Label: "1st", Style: tutorial.AnnotationHighlight},
+						{CardIndex: 1, Label: "2nd", Style: tutorial.AnnotationHighlight},
+					},
+				},
+				TextAfter: "The Left Bower BELONGS to trump during play!",
 			},
 			{
-				Type:  tutorial.SectionText,
-				Title: "Complete Trump Hierarchy",
-				Content: `When Hearts is trump, cards rank (highest to lowest):
-
-TRUMP CARDS:
-  J♥ Right Bower (highest)
-  J♦ Left Bower
-  A♥
-  K♥
-  Q♥
-  10♥
-  9♥ (lowest trump)
-
-OFF-SUIT CARDS:
-  Rank normally: A > K > Q > J > 10 > 9
-
-Remember: Even the 9 of trump beats the Ace of any
-other suit!`,
+				Title:      "Color Pairs",
+				TextBefore: "Remember which suits are paired by color:",
+				Visual: &tutorial.VisualElement{
+					Type: tutorial.VisualCardRow,
+					Cards: []engine.Card{
+						{Suit: engine.Hearts, Rank: engine.Jack},
+						{Suit: engine.Diamonds, Rank: engine.Jack},
+						{Suit: engine.Spades, Rank: engine.Jack},
+						{Suit: engine.Clubs, Rank: engine.Jack},
+					},
+					Caption: "Red: Hearts ↔ Diamonds | Black: Spades ↔ Clubs",
+				},
+			},
+			{
+				Title:      "Trump Hierarchy",
+				TextBefore: "When Hearts is trump, cards rank:",
+				Visual:     tutorial.NewTrumpHierarchyVisual(engine.Hearts),
+				TextAfter:  "Even the 9♥ beats any non-trump card!",
 			},
 		},
 	})
 
+	// Lesson 6: Following Suit
 	tutorial.Register(&tutorial.Lesson{
 		ID:            "rules-2",
 		Title:         "Following Suit",
@@ -76,59 +80,65 @@ other suit!`,
 		Category:      tutorial.CategoryRules,
 		Order:         6,
 		Prerequisites: []string{"rules-1"},
-		Sections: []tutorial.Section{
+		VisualSections: []tutorial.VisualSection{
 			{
-				Type:  tutorial.SectionText,
-				Title: "The Follow Suit Rule",
-				Content: `The most fundamental rule in Euchre:
-
-  IF YOU CAN FOLLOW SUIT, YOU MUST!
-
-When a card is led:
-1. Look at its EFFECTIVE suit
-2. If you have any cards of that suit, play one
-3. Only if you have NONE, may you play anything else
-
-This rule applies to everyone except the leader,
-who can play any card to start the trick.`,
+				Title:      "The Rule",
+				TextBefore: "If you CAN follow suit, you MUST!",
+				Visual: &tutorial.VisualElement{
+					Type: tutorial.VisualHand,
+					Cards: []engine.Card{
+						{Suit: engine.Spades, Rank: engine.Ace},
+						{Suit: engine.Spades, Rank: engine.Ten},
+						{Suit: engine.Hearts, Rank: engine.King},
+						{Suit: engine.Diamonds, Rank: engine.Queen},
+						{Suit: engine.Clubs, Rank: engine.Nine},
+					},
+					HighlightIndices: []int{0, 1}, // Highlight spades
+					Caption:          "Spades led - you MUST play one of your spades",
+				},
+				TextAfter: "Only if you have NONE may you play something else.",
 			},
 			{
-				Type:  tutorial.SectionText,
-				Title: "The Left Bower Exception",
-				Content: `Remember: The Left Bower belongs to the trump suit!
-
-Example (Hearts is trump, Diamonds led):
-• You have: K♦, 10♦, J♦ (Left Bower)
-• You MUST play K♦ or 10♦
-• The J♦ is NOT a diamond anymore - it's a heart!
-
-Example (Hearts is trump, Hearts led):
-• You have: K♦, 10♦, J♦ (Left Bower)
-• You MUST play J♦
-• It's the only heart you have!
-
-This catches many new players off guard!`,
+				Title:      "Left Bower Exception",
+				TextBefore: "The Left Bower belongs to trump, not its printed suit!",
+				Visual: &tutorial.VisualElement{
+					Type: tutorial.VisualHand,
+					Cards: []engine.Card{
+						{Suit: engine.Diamonds, Rank: engine.King},
+						{Suit: engine.Diamonds, Rank: engine.Ten},
+						{Suit: engine.Diamonds, Rank: engine.Jack}, // Left bower when Hearts trump
+						{Suit: engine.Spades, Rank: engine.Queen},
+						{Suit: engine.Clubs, Rank: engine.Nine},
+					},
+					Trump:            engine.Hearts,
+					HighlightIndices: []int{0, 1}, // Only K♦ and 10♦ are diamonds
+					Caption:          "Hearts is trump, Diamonds led",
+					Annotations: []tutorial.CardAnnotation{
+						{CardIndex: 2, Label: "Not a Diamond!", Style: tutorial.AnnotationDim},
+					},
+				},
+				TextAfter: "J♦ is the Left Bower - it's a Heart now!",
 			},
 			{
-				Type:  tutorial.SectionText,
-				Title: "When You Can't Follow",
-				Content: `If you have no cards of the led suit, you have options:
-
-1. TRUMP IN - Play a trump card to win the trick
-   • Any trump beats any non-trump
-   • Be careful not to waste high trumps!
-
-2. DISCARD - Play any off-suit card
-   • This card cannot win
-   • Use it to get rid of low cards
-   • Signal to your partner
-
-Strategic choice: Trump in if you can win, discard if
-your partner is already winning the trick!`,
+				Title:      "Can't Follow Suit",
+				TextBefore: "When you have no cards of the led suit:",
+				Visual: &tutorial.VisualElement{
+					Type: tutorial.VisualCardComparison,
+					Cards: []engine.Card{
+						{Suit: engine.Hearts, Rank: engine.Nine},
+						{Suit: engine.Diamonds, Rank: engine.Nine},
+					},
+					Trump:      engine.Hearts,
+					LeftLabel:  "Trump In",
+					RightLabel: "Discard",
+					Caption:    "Trump to win, or discard to save trump for later",
+				},
+				TextAfter: "Strategic choice: Trump if you can win!",
 			},
 		},
 	})
 
+	// Lesson 7: Scoring in Detail
 	tutorial.Register(&tutorial.Lesson{
 		ID:            "rules-3",
 		Title:         "Scoring in Detail",
@@ -136,52 +146,41 @@ your partner is already winning the trick!`,
 		Category:      tutorial.CategoryRules,
 		Order:         7,
 		Prerequisites: []string{"basics-4"},
-		Sections: []tutorial.Section{
+		VisualSections: []tutorial.VisualSection{
 			{
-				Type:  tutorial.SectionText,
 				Title: "Making Your Bid",
-				Content: `When your team calls trump ("makes"), you need to win
-at least 3 tricks:
+				TextBefore: `When your team calls trump, you need 3+ tricks:
 
-Making (3-4 tricks): 1 point
-  "We made it!" - minimum successful bid
+  ●●●○○  3-4 tricks = 1 point  (you "made it")
+  ●●●●●  5 tricks   = 2 points (march!)
 
-March (all 5 tricks): 2 points
-  "We marched!" - swept the hand
-
-Your team called trump, so you're expected to win.
-Getting only 1 point is the baseline.`,
+You called trump, so you're expected to win.`,
 			},
 			{
-				Type:  tutorial.SectionText,
 				Title: "Getting Euchred",
-				Content: `If your team calls trump but wins only 0, 1, or 2 tricks:
+				TextBefore: `Fail to make 3 tricks? You're EUCHRED!
 
-  YOU'RE EUCHRED!
-  The OTHER team scores 2 points.
+  Your team:  ●●○○○  (only 2 tricks)
+  Opponents:  ●●●○○  (they got 3)
 
-This is a big swing - you expected to score but instead
-your opponents score double!
+  Result: Opponents score 2 points!
 
-This is why you should only call trump when you have
-a strong hand.`,
+This is a big swing - you expected to score but
+instead your opponents score double.`,
 			},
 			{
-				Type:  tutorial.SectionText,
-				Title: "Going Alone",
-				Content: `A player can choose to "go alone" when calling trump.
-Their partner sits out for that hand.
-
-Alone March (all 5 tricks): 4 points!
-  This is the biggest score in Euchre.
-
-Alone but less than 5 tricks: 1 point
-  Same as regular making
-
-Euchred while alone: 2 points to opponents
-  Same as regular euchre
-
-Going alone is risky but can win games quickly!`,
+				Title:      "Going Alone",
+				TextBefore: "Brave enough to play without your partner?",
+				Visual: tutorial.NewTableLayoutVisual(
+					[4]tutorial.PlayerPosition{
+						{Label: "You (Alone)", Style: tutorial.AnnotationHighlight},
+						{Label: "Opponent", Style: tutorial.AnnotationDim},
+						{Label: "Partner", Style: tutorial.AnnotationDim},
+						{Label: "Opponent", Style: tutorial.AnnotationDim},
+					},
+					"Partner sits out - you play alone!",
+				),
+				TextAfter: "Win all 5 tricks alone = 4 POINTS!\nRegular make = 1 point, Euchred = opponents get 2",
 			},
 		},
 	})

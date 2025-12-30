@@ -39,6 +39,36 @@ type Lesson struct {
 	Order         int
 	Prerequisites []string // Lesson IDs that must be completed first
 	Sections      []Section
+	VisualSections []VisualSection // Visual demonstration sections (optional, takes precedence)
+}
+
+// HasVisuals returns true if this lesson uses visual sections
+func (l *Lesson) HasVisuals() bool {
+	return len(l.VisualSections) > 0
+}
+
+// SectionCount returns the number of sections in the lesson
+func (l *Lesson) SectionCount() int {
+	if l.HasVisuals() {
+		return len(l.VisualSections)
+	}
+	return len(l.Sections)
+}
+
+// GetVisualSection returns a visual section by index, or nil if not available
+func (l *Lesson) GetVisualSection(index int) *VisualSection {
+	if !l.HasVisuals() || index < 0 || index >= len(l.VisualSections) {
+		return nil
+	}
+	return &l.VisualSections[index]
+}
+
+// GetSection returns a text section by index, or nil if not available
+func (l *Lesson) GetSection(index int) *Section {
+	if l.HasVisuals() || index < 0 || index >= len(l.Sections) {
+		return nil
+	}
+	return &l.Sections[index]
 }
 
 // Section represents a part of a lesson
@@ -56,6 +86,7 @@ const (
 	SectionExample
 	SectionQuiz
 	SectionInteractive
+	SectionVisual // Visual demonstration section
 )
 
 // LessonRegistry holds all lessons

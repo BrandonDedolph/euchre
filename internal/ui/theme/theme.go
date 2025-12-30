@@ -36,6 +36,12 @@ type Theme struct {
 	MenuItem         lipgloss.Style
 	MenuItemSelected lipgloss.Style
 	MenuItemDisabled lipgloss.Style
+
+	// Visual lesson elements
+	AnnotationLabel  lipgloss.Style
+	WinnerHighlight  lipgloss.Style
+	LoserDim         lipgloss.Style
+	VisualCaption    lipgloss.Style
 }
 
 // Default returns the default theme
@@ -113,6 +119,19 @@ func Default() *Theme {
 		MenuItemDisabled: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#95A5A6")).
 			PaddingLeft(2),
+
+		// Visual lesson elements
+		AnnotationLabel: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#3498DB")).
+			Bold(true),
+		WinnerHighlight: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#27AE60")).
+			Bold(true),
+		LoserDim: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#95A5A6")),
+		VisualCaption: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7F8C8D")).
+			Italic(true),
 	}
 }
 

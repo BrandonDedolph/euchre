@@ -30,6 +30,10 @@ type LearningJourney struct {
 	scroll         int
 	width          int
 	height         int
+
+	// Visual section support
+	visualView *components.LessonVisualView
+	animCtrl   *components.AnimationController
 }
 
 // NewLearningJourney creates a new learning journey screen
@@ -54,6 +58,12 @@ func (lj *LearningJourney) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lj.width = msg.Width
 		lj.height = msg.Height
 
+	case components.AnimTickMsg:
+		// Handle animation tick
+		if lj.animCtrl != nil {
+			return lj, lj.animCtrl.Tick()
+		}
+
 	case tea.KeyMsg:
 		switch lj.phase {
 		case PhaseWelcome:
@@ -72,6 +82,7 @@ func (lj *LearningJourney) updateWelcome(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter", " ":
 		lj.phase = PhaseLessonContent
+		lj.setupVisualSection()
 	case "q", "esc":
 		return lj, Navigate(ScreenMainMenu)
 	}
@@ -81,6 +92,15 @@ func (lj *LearningJourney) updateWelcome(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (lj *LearningJourney) updateLessonContent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter", " ", "right", "l", "n":
+		// If we have an animation that needs user input, advance it
+		if lj.animCtrl != nil && lj.animCtrl.NeedsUserInput() {
+			return lj, lj.animCtrl.Advance()
+		}
+		// If we have a visual sequence that's not complete, advance it
+		if lj.visualView != nil && !lj.visualView.IsSequenceComplete() {
+			lj.visualView.AdvanceSequence()
+			return lj, nil
+		}
 		return lj.advanceContent()
 	case "left", "h", "b":
 		return lj.goBack()
@@ -121,11 +141,13 @@ func (lj *LearningJourney) advanceContent() (tea.Model, tea.Cmd) {
 	}
 
 	lesson := lj.allLessons[lj.currentLesson]
+	sectionCount := lesson.SectionCount()
 
-	if lj.currentSection < len(lesson.Sections)-1 {
+	if lj.currentSection < sectionCount-1 {
 		// More sections in this lesson
 		lj.currentSection++
 		lj.scroll = 0
+		lj.setupVisualSection()
 		return lj, nil
 	}
 
@@ -135,11 +157,14 @@ func (lj *LearningJourney) advanceContent() (tea.Model, tea.Cmd) {
 		lj.currentLesson++
 		lj.currentSection = 0
 		lj.scroll = 0
+		lj.setupVisualSection()
 		return lj, nil
 	}
 
 	// Journey complete!
 	lj.phase = PhaseCompletion
+	lj.visualView = nil
+	lj.animCtrl = nil
 	return lj, nil
 }
 
@@ -148,6 +173,7 @@ func (lj *LearningJourney) goBack() (tea.Model, tea.Cmd) {
 		// Previous section in this lesson
 		lj.currentSection--
 		lj.scroll = 0
+		lj.setupVisualSection()
 		return lj, nil
 	}
 
@@ -155,14 +181,47 @@ func (lj *LearningJourney) goBack() (tea.Model, tea.Cmd) {
 		// Go to last section of previous lesson
 		lj.currentLesson--
 		prevLesson := lj.allLessons[lj.currentLesson]
-		lj.currentSection = len(prevLesson.Sections) - 1
+		lj.currentSection = prevLesson.SectionCount() - 1
 		lj.scroll = 0
+		lj.setupVisualSection()
 		return lj, nil
 	}
 
 	// At the very beginning - go back to welcome
 	lj.phase = PhaseWelcome
+	lj.visualView = nil
+	lj.animCtrl = nil
 	return lj, nil
+}
+
+// setupVisualSection initializes the visual view for the current section
+func (lj *LearningJourney) setupVisualSection() {
+	lj.visualView = nil
+	lj.animCtrl = nil
+
+	if len(lj.allLessons) == 0 {
+		return
+	}
+
+	lesson := lj.allLessons[lj.currentLesson]
+	if !lesson.HasVisuals() {
+		return
+	}
+
+	visualSection := lesson.GetVisualSection(lj.currentSection)
+	if visualSection == nil || visualSection.Visual == nil {
+		return
+	}
+
+	// Create visual view
+	boxWidth := max(60, lj.width*2/3)
+	boxHeight := max(12, lj.height/2)
+	lj.visualView = components.NewLessonVisualView(visualSection.Visual, boxWidth, boxHeight)
+
+	// If the visual has a sequence, set up the animation controller
+	if len(visualSection.Visual.Sequence) > 0 {
+		lj.animCtrl = components.NewAnimationController(visualSection.Visual.Sequence)
+	}
 }
 
 // View implements tea.Model
@@ -243,7 +302,7 @@ func (lj *LearningJourney) renderLessonContent(width int) string {
 	}
 
 	lesson := lj.allLessons[lj.currentLesson]
-	section := lesson.Sections[lj.currentSection]
+	sectionCount := lesson.SectionCount()
 
 	// Progress indicator
 	progress := components.NewJourneyProgress(len(lj.allLessons), lj.currentLesson)
@@ -252,6 +311,14 @@ func (lj *LearningJourney) renderLessonContent(width int) string {
 	// Lesson indicator
 	lessonLabel := theme.Current.Primary.Render(
 		strings.Repeat(" ", 4) + "Lesson " + string(rune('0'+lj.currentLesson+1)) + " of " + string(rune('0'+len(lj.allLessons))))
+
+	// Check if this lesson has visual sections
+	if lesson.HasVisuals() {
+		return lj.renderVisualLessonContent(width, lesson, progressStr, lessonLabel, sectionCount)
+	}
+
+	// Fall back to text-based rendering
+	section := lesson.Sections[lj.currentSection]
 
 	// Section title
 	sectionTitleStyle := lipgloss.NewStyle().
@@ -295,6 +362,91 @@ func (lj *LearningJourney) renderLessonContent(width int) string {
 	navHintsRendered := navStyle.Render(navHints)
 
 	help := theme.Current.Help.Render("←/→: Navigate • ↑/↓: Scroll • Esc: Exit")
+
+	content := lipgloss.PlaceHorizontal(width, lipgloss.Center, progressStr) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, lessonLabel) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, sectionTitle) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, contentBox) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, sectionProgress) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, navHintsRendered) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, help)
+
+	return content
+}
+
+func (lj *LearningJourney) renderVisualLessonContent(width int, lesson *tutorial.Lesson, progressStr, lessonLabel string, sectionCount int) string {
+	visualSection := lesson.GetVisualSection(lj.currentSection)
+	if visualSection == nil {
+		return "No section available"
+	}
+
+	// Section title
+	sectionTitleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#3498DB")).
+		Bold(true)
+
+	sectionTitle := sectionTitleStyle.Render(visualSection.Title)
+
+	// Build content
+	var contentParts []string
+
+	// Text before visual
+	if visualSection.TextBefore != "" {
+		textStyle := theme.Current.Body
+		contentParts = append(contentParts, textStyle.Render(colorizeCards(visualSection.TextBefore)))
+		contentParts = append(contentParts, "")
+	}
+
+	// Visual element
+	if visualSection.Visual != nil {
+		// Initialize visual view if needed
+		if lj.visualView == nil || lj.visualView.Element != visualSection.Visual {
+			boxWidth := max(60, width*2/3)
+			boxHeight := max(12, lj.height/2)
+			lj.visualView = components.NewLessonVisualView(visualSection.Visual, boxWidth, boxHeight)
+		}
+		visualContent := lj.visualView.Render()
+		contentParts = append(contentParts, visualContent)
+		contentParts = append(contentParts, "")
+	}
+
+	// Text after visual
+	if visualSection.TextAfter != "" {
+		textStyle := theme.Current.Body
+		contentParts = append(contentParts, textStyle.Render(colorizeCards(visualSection.TextAfter)))
+	}
+
+	// Join content parts
+	contentText := strings.Join(contentParts, "\n")
+
+	// Content box
+	boxWidth := max(60, width*2/3)
+	boxHeight := max(14, lj.height/2)
+	contentStyle := lipgloss.NewStyle().
+		Width(boxWidth).
+		Height(boxHeight).
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#3498DB"))
+
+	contentBox := contentStyle.Render(contentText)
+
+	// Section progress within lesson
+	sectionProgress := lj.renderSectionProgress(sectionCount, lj.currentSection)
+
+	// Navigation hints
+	var navHints string
+	if lj.currentLesson == 0 && lj.currentSection == 0 {
+		navHints = "                              Continue →"
+	} else if lj.currentLesson == len(lj.allLessons)-1 && lj.currentSection == sectionCount-1 {
+		navHints = "← Back                        Finish"
+	} else {
+		navHints = "← Back                        Continue →"
+	}
+	navStyle := theme.Current.Muted
+	navHintsRendered := navStyle.Render(navHints)
+
+	help := theme.Current.Help.Render("←/→: Navigate • Esc: Exit")
 
 	content := lipgloss.PlaceHorizontal(width, lipgloss.Center, progressStr) + "\n" +
 		lipgloss.PlaceHorizontal(width, lipgloss.Center, lessonLabel) + "\n\n" +
