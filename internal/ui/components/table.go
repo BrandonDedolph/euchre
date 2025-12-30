@@ -186,13 +186,63 @@ func (t *TableView) renderSidePlayer(playerIdx int, isLeft bool) string {
 	return style.Render(sb.String())
 }
 
-// renderTrickArea renders the center area with trump card in center and played cards around it
+// renderTrickArea renders the center area with played cards
 func (t *TableView) renderTrickArea() string {
 	cardWidth := 7  // Card width
 	cardHeight := 5 // Card height
-	totalWidth := cardWidth*3 + 8 // 3 cards + spacing
+	totalWidth := cardWidth*3 + 4 // 3 cards + spacing
 
-	// Render each player's card (or empty placeholder)
+	// During bidding, show the turned card in the center
+	if t.Trump == engine.NoSuit && t.TurnedCard.Suit != engine.NoSuit && len(t.CurrentTrick) == 0 {
+		var turnedCard string
+		if t.CardFlipFrames > 0 && t.CardFlipTotal > 0 {
+			// Show card flip animation
+			progress := float64(t.CardFlipTotal-t.CardFlipFrames) / float64(t.CardFlipTotal)
+			turnedCard = t.renderFlipAnimation(progress)
+		} else {
+			cv := NewCardView(t.TurnedCard)
+			turnedCard = cv.Render()
+		}
+
+		// Empty placeholder for surrounding positions
+		placeholder := lipgloss.NewStyle().
+			Width(cardWidth).
+			Height(cardHeight).
+			Render("")
+
+		// Top row (empty)
+		topRow := lipgloss.NewStyle().Height(cardHeight).Render(
+			lipgloss.PlaceHorizontal(totalWidth, lipgloss.Center, placeholder),
+		)
+
+		// Middle row with turned card in center
+		middleRow := lipgloss.NewStyle().Height(cardHeight).Render(
+			lipgloss.JoinHorizontal(lipgloss.Center,
+				placeholder,
+				"  ",
+				turnedCard,
+				"  ",
+				placeholder,
+			),
+		)
+
+		// Bottom row (empty)
+		bottomRow := lipgloss.NewStyle().Height(cardHeight).Render(
+			lipgloss.PlaceHorizontal(totalWidth, lipgloss.Center, placeholder),
+		)
+
+		content := lipgloss.JoinVertical(lipgloss.Center, topRow, middleRow, bottomRow)
+
+		// Outer border
+		style := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#3498DB")).
+			Padding(0, 1)
+
+		return style.Render(content)
+	}
+
+	// During play: show played cards in diamond pattern (no center card)
 	renderCard := func(playerIdx int) string {
 		// Check if this card is being animated in
 		if t.CardPlayAnim != nil && t.CardPlayAnim.FromPlayer == playerIdx {
@@ -238,49 +288,26 @@ func (t *TableView) renderTrickArea() string {
 		return placeholder
 	}
 
-	// Render the center trump card
-	renderCenterCard := func() string {
-		if t.TurnedCard.Suit == engine.NoSuit {
-			// No turned card yet
-			return lipgloss.NewStyle().
-				Width(cardWidth).
-				Height(cardHeight).
-				Render("")
-		}
+	topCard := renderCard(2)    // Partner
+	leftCard := renderCard(1)   // West
+	rightCard := renderCard(3)  // East
+	bottomCard := renderCard(0) // You
 
-		// Show card flip animation if active
-		if t.CardFlipFrames > 0 && t.CardFlipTotal > 0 {
-			progress := float64(t.CardFlipTotal-t.CardFlipFrames) / float64(t.CardFlipTotal)
-			return t.renderFlipAnimation(progress)
-		}
-
-		cv := NewCardView(t.TurnedCard)
-		return cv.Render()
-	}
-
-	topCard := renderCard(2)      // Partner
-	leftCard := renderCard(1)     // West
-	centerCard := renderCenterCard() // Trump card
-	rightCard := renderCard(3)    // East
-	bottomCard := renderCard(0)   // You
-
-	// Build layout with trump card in center:
-	//           [Partner]
-	// [West]  [TrumpCard]  [East]
-	//            [You]
+	// Build layout:
+	//        [Partner]
+	// [West]           [East]
+	//          [You]
 
 	// Top row (Partner's card centered)
 	topRow := lipgloss.NewStyle().Height(cardHeight).Render(
 		lipgloss.PlaceHorizontal(totalWidth, lipgloss.Center, topCard),
 	)
 
-	// Middle row (West, Trump, East)
+	// Middle row (West and East cards on sides)
 	middleRow := lipgloss.NewStyle().Height(cardHeight).Render(
 		lipgloss.JoinHorizontal(lipgloss.Center,
 			leftCard,
-			"  ",
-			centerCard,
-			"  ",
+			lipgloss.NewStyle().Width(cardWidth+4).Render(""),
 			rightCard,
 		),
 	)
