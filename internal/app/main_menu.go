@@ -99,15 +99,13 @@ func (m *MainMenu) View() string {
 		height = 24
 	}
 
-	// ASCII art title
-	title := `
-    ███████╗██╗   ██╗ ██████╗██╗  ██╗██████╗ ███████╗
-    ██╔════╝██║   ██║██╔════╝██║  ██║██╔══██╗██╔════╝
-    █████╗  ██║   ██║██║     ███████║██████╔╝█████╗
-    ██╔══╝  ██║   ██║██║     ██╔══██║██╔══██╗██╔══╝
-    ███████╗╚██████╔╝╚██████╗██║  ██║██║  ██║███████╗
-    ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
-`
+	// ASCII art title (each line padded to same width)
+	title := `███████╗██╗   ██╗ ██████╗██╗  ██╗██████╗ ███████╗
+██╔════╝██║   ██║██╔════╝██║  ██║██╔══██╗██╔════╝
+█████╗  ██║   ██║██║     ███████║██████╔╝█████╗
+██╔══╝  ██║   ██║██║     ██╔══██║██╔══██╗██╔══╝
+███████╗╚██████╔╝╚██████╗██║  ██║██║  ██║███████╗
+╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝`
 
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#3498DB")).
@@ -122,10 +120,14 @@ func (m *MainMenu) View() string {
 
 	help := theme.Current.Help.Render("↑/↓ or j/k: Navigate • Enter: Select • Esc: Quit")
 
-	innerContent := titleStyle.Render(title) + "\n" +
-		subtitle + "\n\n" +
-		menuBox + "\n\n" +
-		help
+	// Center all elements
+	titleRendered := titleStyle.Render(title)
+	titleWidth := lipgloss.Width(titleRendered)
+
+	innerContent := titleRendered + "\n" +
+		lipgloss.PlaceHorizontal(titleWidth, lipgloss.Center, subtitle) + "\n\n" +
+		lipgloss.PlaceHorizontal(titleWidth, lipgloss.Center, menuBox) + "\n\n" +
+		lipgloss.PlaceHorizontal(titleWidth, lipgloss.Center, help)
 
 	// Center content and wrap in screen border
 	centeredContent := lipgloss.Place(width-4, height-4, lipgloss.Center, lipgloss.Center, innerContent)
