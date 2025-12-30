@@ -115,9 +115,9 @@ func (m *MainMenu) View() string {
 
 	subtitle := theme.Current.Subtitle.Render("Learn and play the classic trick-taking card game")
 
-	// Wrap menu in content box with fixed size
+	// Wrap menu in content box
 	menuBox := theme.Current.ContentBox.
-		Width(40).
+		Width(48).
 		Render(m.menu.Render())
 
 	help := theme.Current.Help.Render("↑/↓ or j/k: Navigate • Enter: Select • Esc: Quit")

@@ -83,8 +83,10 @@ func (t *TableView) Render() string {
 // RenderTricksTable renders a small 1x2 table for tricks
 func RenderTricksTable(tricks int) string {
 	bc := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	// Center the number in a 3-char wide cell
+	numStyle := lipgloss.NewStyle().Width(3).Align(lipgloss.Center)
 	return bc.Render("┌────────┬───┐") + "\n" +
-		bc.Render("│") + " Tricks " + bc.Render("│") + fmt.Sprintf(" %d ", tricks) + bc.Render("│") + "\n" +
+		bc.Render("│") + " Tricks " + bc.Render("│") + numStyle.Render(fmt.Sprintf("%d", tricks)) + bc.Render("│") + "\n" +
 		bc.Render("└────────┴───┘")
 }
 
@@ -193,7 +195,9 @@ func (t *TableView) renderTrickArea() string {
 	totalWidth := cardWidth*3 + 4 // 3 cards + spacing
 
 	// During bidding, show the turned card in the center
-	if t.Trump == engine.NoSuit && t.TurnedCard.Suit != engine.NoSuit && len(t.CurrentTrick) == 0 {
+	// Check TurnedCard is not zero value (which would be Nine of Clubs due to iota)
+	hasTurnedCard := t.TurnedCard != (engine.Card{})
+	if t.Trump == engine.NoSuit && hasTurnedCard && len(t.CurrentTrick) == 0 {
 		var turnedCard string
 		if t.CardFlipFrames > 0 && t.CardFlipTotal > 0 {
 			// Show card flip animation

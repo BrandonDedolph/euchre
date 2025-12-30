@@ -1074,7 +1074,8 @@ func (g *GamePlay) View() string {
 		if g.game.Dealer() == g.humanPlayer {
 			header += " " + dealerStyle.Render("DEALER")
 		}
-		handStr = header + "\n" + components.RenderFaceDown(cardCount)
+		faceDown := components.RenderFaceDown(cardCount)
+		handStr = lipgloss.JoinVertical(lipgloss.Center, header, faceDown)
 	} else {
 		hand := g.game.Hand(g.humanPlayer)
 		playerTricks := 0
@@ -1089,19 +1090,24 @@ func (g *GamePlay) View() string {
 			playerName += " " + dealerStyle.Render("DEALER")
 		}
 
-		// Show tricks table
+		// Show tricks table (or suit selector during round 2 bidding)
 		tricksTable := components.RenderTricksTable(playerTricks)
 
-		// Special message during discard phase
+		// Build header - center everything for consistent layout
 		var playerHeader string
-		if g.game.Phase() == engine.PhaseDiscard && len(hand) == 6 {
-			playerHeader = playerName + " " + theme.Current.Muted.Render("(select one to discard)") + "\n" + tricksTable
+		phase := g.game.Phase()
+		if phase == engine.PhaseBidRound2 && g.game.CurrentPlayer() == g.humanPlayer && g.suitSelector != nil {
+			// Show suit selector in place of tricks during round 2 bidding
+			suitSelectorWidget := g.suitSelector.Render()
+			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, suitSelectorWidget)
+		} else if phase == engine.PhaseDiscard && len(hand) == 6 {
+			discardMsg := theme.Current.Muted.Render("(select one to discard)")
+			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, tricksTable, discardMsg)
 		} else {
-			playerHeader = playerName + "\n" + tricksTable
+			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, tricksTable)
 		}
 
 		legalPlays := make([]engine.Card, 0)
-		phase := g.game.Phase()
 		if phase == engine.PhasePlay && g.game.CurrentPlayer() == g.humanPlayer {
 			if round != nil && round.Trick() != nil {
 				legalPlays = engine.LegalPlays(engine.NewHandWith(hand), round.Trick())
@@ -1115,7 +1121,8 @@ func (g *GamePlay) View() string {
 			for i, c := range hand {
 				cardNames[i] = c.String()
 			}
-			playerHeader = theme.Current.CardRed.Render(fmt.Sprintf("BUG: You have %d cards: %v", len(hand), cardNames)) + "\n" + tricksTable
+			bugMsg := theme.Current.CardRed.Render(fmt.Sprintf("BUG: You have %d cards: %v", len(hand), cardNames))
+			playerHeader = lipgloss.JoinVertical(lipgloss.Center, bugMsg, tricksTable)
 		}
 
 		// Only show selection when it's your turn to select a card
@@ -1128,7 +1135,8 @@ func (g *GamePlay) View() string {
 			selectedIdx = g.selectedCard
 		}
 
-		handStr = playerHeader + "\n" + components.RenderHand(hand, selectedIdx, legalPlays)
+		handCards := components.RenderHand(hand, selectedIdx, legalPlays)
+		handStr = lipgloss.JoinVertical(lipgloss.Center, playerHeader, handCards)
 	}
 
 	// Fixed height for hand area (1 name + 3 tricks table + 1 blank + 5 cards + 1 raised = 11)
@@ -1150,15 +1158,8 @@ func (g *GamePlay) View() string {
 	// Help text
 	helpStr := g.getHelpText()
 
-	// Suit selector for bidding round 2
-	suitSelectorStr := ""
-	if g.game.Phase() == engine.PhaseBidRound2 && g.game.CurrentPlayer() == g.humanPlayer && g.suitSelector != nil {
-		suitSelectorStr = "\n" + lipgloss.PlaceHorizontal(60, lipgloss.Center, g.suitSelector.Render()) + "\n"
-	}
-
 	innerContent := scoreStr + "\n\n" +
 		tableStr + "\n" +
-		suitSelectorStr +
 		handStr + "\n\n" +
 		theme.Current.Accent.Render(phaseStr) + "\n\n" +
 		theme.Current.Help.Render(helpStr)
@@ -1279,15 +1280,7 @@ func (g *GamePlay) getPhaseMessage() string {
 
 	case engine.PhaseBidRound2:
 		if isYourTurn {
-			// Show which suits are available (not the turned down suit)
-			turnedSuit := g.game.TurnedCard().Suit
-			var available []string
-			for _, s := range []engine.Suit{engine.Clubs, engine.Diamonds, engine.Hearts, engine.Spades} {
-				if s != turnedSuit {
-					available = append(available, fmt.Sprintf("%s=%s", string(s.String()[0]), s.Symbol()))
-				}
-			}
-			return fmt.Sprintf("Round 2: Call trump (%s) or pass?", strings.Join(available, " "))
+			return "Round 2: Select a suit or pass"
 		}
 		return fmt.Sprintf("Waiting for %s to bid...", g.tableView.PlayerNames[current])
 

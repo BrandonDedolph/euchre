@@ -104,9 +104,9 @@ func (g *GameSetup) View() string {
 
 	title := theme.Current.Title.Render("Game Setup")
 
-	// Wrap menu in content box with fixed size
+	// Wrap menu in content box
 	menuBox := theme.Current.ContentBox.
-		Width(40).
+		Width(48).
 		Render(g.menu.Render())
 
 	help := theme.Current.Help.Render("↑/↓: Navigate • Enter: Select/Toggle • Esc: Back")

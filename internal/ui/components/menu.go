@@ -70,10 +70,9 @@ func (m *Menu) Render() string {
 		sb.WriteString("\n\n")
 	}
 
-	// Fixed description area at top (fixed size to prevent layout shift)
+	// Fixed description area at top (wide enough for all descriptions on 1 line)
 	descStyle := lipgloss.NewStyle().
-		Width(38).
-		Height(2).
+		Width(44).
 		Foreground(theme.Current.Subtitle.GetForeground())
 
 	desc := ""
