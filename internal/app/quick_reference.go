@@ -100,10 +100,20 @@ func (q *QuickReference) View() string {
 		height = 30
 	}
 
+	// Header: title + tabs (fixed at top)
 	title := theme.Current.Title.Render("Euchre Quick Reference")
-
-	// Render tab bar
 	tabBar := q.renderTabBar()
+	header := lipgloss.PlaceHorizontal(width, lipgloss.Center, title) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, tabBar)
+	headerHeight := lipgloss.Height(header)
+
+	// Footer: help text (fixed at bottom)
+	help := theme.Current.Help.Render("←/→: Switch tabs • 1-4: Jump to tab • Esc: Back")
+	footer := lipgloss.PlaceHorizontal(width, lipgloss.Center, help)
+	footerHeight := lipgloss.Height(footer)
+
+	// Content area: fills remaining space
+	contentHeight := height - headerHeight - footerHeight - 2 // 2 for spacing
 
 	// Render active panel content
 	var panelContent string
@@ -118,21 +128,18 @@ func (q *QuickReference) View() string {
 		panelContent = q.renderBiddingPanel()
 	}
 
-	// Wrap content in panel box with minimal padding
+	// Wrap content in panel box
 	contentBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#3498DB")).
 		Padding(0, 1).
 		Render(panelContent)
 
-	help := theme.Current.Help.Render("←/→: Switch tabs • 1-4: Jump to tab • Esc: Back")
+	// Center content horizontally and place in middle area
+	centeredContent := lipgloss.Place(width, contentHeight, lipgloss.Center, lipgloss.Center, contentBox)
 
-	innerContent := title + "\n" +
-		tabBar + "\n" +
-		contentBox + "\n" +
-		help
-
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, innerContent)
+	// Assemble: header at top, content in middle, footer at bottom
+	return header + "\n" + centeredContent + "\n" + footer
 }
 
 // renderTabBar renders the tab navigation bar

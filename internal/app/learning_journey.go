@@ -238,24 +238,27 @@ func (lj *LearningJourney) View() string {
 		height = 24
 	}
 
-	var innerContent string
+	var header, content, footer string
+
 	switch lj.phase {
 	case PhaseWelcome:
-		innerContent = lj.renderWelcome(width - 4)
+		header, content, footer = lj.renderWelcomeParts(width - 4)
 	case PhaseLessonContent:
-		innerContent = lj.renderLessonContent(width - 4)
+		header, content, footer = lj.renderLessonContentParts(width - 4)
 	case PhaseCompletion:
-		innerContent = lj.renderCompletion(width - 4)
+		header, content, footer = lj.renderCompletionParts(width - 4)
 	}
 
-	// Center content and wrap in screen border
-	centeredContent := lipgloss.Place(width-4, height-4, lipgloss.Center, lipgloss.Center, innerContent)
-	screenBox := theme.Current.ScreenBorder.
-		Width(width - 2).
-		Height(height - 2).
-		Render(centeredContent)
+	// Calculate content area height
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(footer)
+	contentHeight := height - headerHeight - footerHeight - 2 // spacing
 
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, screenBox)
+	// Center content in the middle area
+	centeredContent := lipgloss.Place(width, contentHeight, lipgloss.Center, lipgloss.Center, content)
+
+	// Assemble: header at top, content in middle, footer at bottom
+	return header + "\n" + centeredContent + "\n" + footer
 }
 
 func (lj *LearningJourney) renderWelcome(width int) string {
@@ -558,6 +561,246 @@ are ready to play Euchre!`)
 		lipgloss.PlaceHorizontal(width, lipgloss.Center, help)
 
 	return content
+}
+
+// renderWelcomeParts returns header, content, footer for welcome phase
+func (lj *LearningJourney) renderWelcomeParts(width int) (string, string, string) {
+	// Header: decorative cards + title + tagline
+	decorativeCards := []engine.Card{
+		{Suit: engine.Spades, Rank: engine.Jack},
+		{Suit: engine.Hearts, Rank: engine.Jack},
+		{Suit: engine.Diamonds, Rank: engine.Jack},
+		{Suit: engine.Clubs, Rank: engine.Jack},
+	}
+	cardViews := make([]string, len(decorativeCards))
+	for i, card := range decorativeCards {
+		cv := components.NewCardView(card)
+		cardViews[i] = cv.Render()
+	}
+	cardRow := lipgloss.JoinHorizontal(lipgloss.Top, cardViews...)
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#3498DB")).
+		Bold(true)
+	title := titleStyle.Render("Learn to Play Euchre")
+	tagline := theme.Current.LessonText.Render("Master America's favorite trick-taking card game")
+
+	header := lipgloss.PlaceHorizontal(width, lipgloss.Center, cardRow) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, title) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, tagline)
+
+	// Content: lesson list + time + button
+	var lessonList strings.Builder
+	numberStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#3498DB")).
+		Bold(true)
+	lessonTitleStyle := theme.Current.LessonText
+
+	for i, lesson := range lj.allLessons {
+		num := numberStyle.Render(string(rune('1'+i)) + ".")
+		lessonList.WriteString("   " + num + " " + lessonTitleStyle.Render(lesson.Title) + "\n")
+	}
+
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#3498DB")).
+		Padding(1, 2).
+		Render(lessonList.String())
+
+	timeEstimate := theme.Current.Muted.Render("◷ About 10 minutes")
+
+	buttonStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#27AE60")).
+		Padding(0, 4).
+		Bold(true)
+	button := buttonStyle.Render("▶ Start Learning")
+
+	content := lipgloss.PlaceHorizontal(width, lipgloss.Center, contentBox) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, timeEstimate) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, button)
+
+	// Footer: help text
+	footer := lipgloss.PlaceHorizontal(width, lipgloss.Center,
+		theme.Current.Help.Render("Enter: Start • Esc: Back to menu"))
+
+	return header, content, footer
+}
+
+// renderLessonContentParts returns header, content, footer for lesson phase
+func (lj *LearningJourney) renderLessonContentParts(width int) (string, string, string) {
+	if len(lj.allLessons) == 0 {
+		return "", "No lessons available", ""
+	}
+
+	lesson := lj.allLessons[lj.currentLesson]
+
+	// Header: progress + lesson label
+	progress := components.NewJourneyProgress(len(lj.allLessons), lj.currentLesson)
+	progressStr := progress.Render()
+	lessonLabel := theme.Current.Primary.Render(
+		strings.Repeat(" ", 4) + "Lesson " + string(rune('0'+lj.currentLesson+1)) + " of " + string(rune('0'+len(lj.allLessons))))
+
+	header := lipgloss.PlaceHorizontal(width, lipgloss.Center, progressStr) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, lessonLabel)
+
+	// Footer: help text
+	footer := lipgloss.PlaceHorizontal(width, lipgloss.Center,
+		theme.Current.Help.Render("←/→: Navigate • ↑/↓: Scroll • Esc: Exit"))
+
+	// Content varies based on whether lesson has visuals
+	var content string
+	if lesson.HasVisuals() {
+		content = lj.renderVisualLessonBody(width, lesson)
+	} else {
+		content = lj.renderTextLessonBody(width, lesson)
+	}
+
+	return header, content, footer
+}
+
+// renderTextLessonBody renders the body content for text-based lessons
+func (lj *LearningJourney) renderTextLessonBody(width int, lesson *tutorial.Lesson) string {
+	section := lesson.Sections[lj.currentSection]
+
+	sectionTitleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#3498DB")).
+		Bold(true)
+	sectionTitle := sectionTitleStyle.Render(section.Title)
+
+	boxWidth := 50
+	boxHeight := 10
+	contentStyle := lipgloss.NewStyle().
+		Width(boxWidth).
+		Height(boxHeight).
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#3498DB"))
+
+	lines := strings.Split(section.Content, "\n")
+	if lj.scroll > 0 && lj.scroll < len(lines) {
+		lines = lines[lj.scroll:]
+	}
+	contentText := strings.Join(lines, "\n")
+	contentText = colorizeCards(contentText)
+	contentBox := contentStyle.Render(contentText)
+
+	sectionProgress := lj.renderSectionProgress(len(lesson.Sections), lj.currentSection)
+	navHints := lj.renderNavHints(lesson)
+
+	return lipgloss.PlaceHorizontal(width, lipgloss.Center, sectionTitle) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, contentBox) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, sectionProgress) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, navHints)
+}
+
+// renderVisualLessonBody renders the body content for visual lessons
+func (lj *LearningJourney) renderVisualLessonBody(width int, lesson *tutorial.Lesson) string {
+	visualSection := lesson.GetVisualSection(lj.currentSection)
+	if visualSection == nil {
+		return "No section available"
+	}
+
+	sectionTitleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#3498DB")).
+		Bold(true)
+	sectionTitle := sectionTitleStyle.Render(visualSection.Title)
+
+	boxWidth := 50
+	boxHeight := 10
+	if visualSection.Visual != nil && visualSection.Visual.Type == tutorial.VisualTrumpHierarchy {
+		boxWidth = 60
+		boxHeight = 16
+	}
+
+	contentStyle := lipgloss.NewStyle().
+		Width(boxWidth).
+		Height(boxHeight).
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#3498DB"))
+
+	var contentParts []string
+	if visualSection.TextBefore != "" {
+		contentParts = append(contentParts, colorizeCards(visualSection.TextBefore))
+	}
+	if lj.visualView != nil {
+		contentParts = append(contentParts, lj.visualView.Render())
+	}
+	if visualSection.TextAfter != "" {
+		contentParts = append(contentParts, colorizeCards(visualSection.TextAfter))
+	}
+
+	contentBox := contentStyle.Render(strings.Join(contentParts, "\n\n"))
+
+	sectionProgress := lj.renderSectionProgress(lesson.SectionCount(), lj.currentSection)
+	navHints := lj.renderNavHints(lesson)
+
+	return lipgloss.PlaceHorizontal(width, lipgloss.Center, sectionTitle) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, contentBox) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, sectionProgress) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, navHints)
+}
+
+// renderNavHints returns navigation hints based on current position
+func (lj *LearningJourney) renderNavHints(lesson *tutorial.Lesson) string {
+	sectionCount := lesson.SectionCount()
+	var navHints string
+	if lj.currentLesson == 0 && lj.currentSection == 0 {
+		navHints = "                              Continue →"
+	} else if lj.currentLesson == len(lj.allLessons)-1 && lj.currentSection == sectionCount-1 {
+		navHints = "← Back                        Finish"
+	} else {
+		navHints = "← Back                        Continue →"
+	}
+	return theme.Current.Muted.Render(navHints)
+}
+
+// renderCompletionParts returns header, content, footer for completion phase
+func (lj *LearningJourney) renderCompletionParts(width int) (string, string, string) {
+	// Header: title
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#27AE60")).
+		Bold(true)
+	title := titleStyle.Render("Journey Complete!")
+
+	header := lipgloss.PlaceHorizontal(width, lipgloss.Center, title)
+
+	// Content: message + progress + button
+	message := theme.Current.LessonText.Render(`Congratulations!
+
+You've completed all the lessons and
+are ready to play Euchre!`)
+
+	progress := components.NewJourneyProgress(len(lj.allLessons), len(lj.allLessons))
+	progressStr := progress.RenderCompact()
+
+	checkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#27AE60"))
+	checks := ""
+	for i := 0; i < len(lj.allLessons); i++ {
+		checks += checkStyle.Render("✓")
+		if i < len(lj.allLessons)-1 {
+			checks += "   "
+		}
+	}
+
+	buttonStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Background(lipgloss.Color("#27AE60")).
+		Padding(0, 3).
+		Bold(true)
+	button := buttonStyle.Render("Start Playing")
+
+	content := lipgloss.PlaceHorizontal(width, lipgloss.Center, message) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, progressStr) + "\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, checks) + "\n\n" +
+		lipgloss.PlaceHorizontal(width, lipgloss.Center, button)
+
+	// Footer: help text
+	footer := lipgloss.PlaceHorizontal(width, lipgloss.Center,
+		theme.Current.Help.Render("Enter: Main menu • p: Play game • r: Review lessons"))
+
+	return header, content, footer
 }
 
 // colorizeCards applies red coloring to hearts/diamonds and their card notations
