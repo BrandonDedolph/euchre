@@ -52,10 +52,10 @@ func Default() *Theme {
 		CardRed: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E74C3C")),
 		CardBlack: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#2C3E50")),
+			Foreground(lipgloss.Color("#000000")),
 		CardBackground: lipgloss.NewStyle().
 			Background(lipgloss.Color("#FFFFFF")).
-			Foreground(lipgloss.Color("#2C3E50")),
+			Foreground(lipgloss.Color("#000000")),
 		CardSelected: lipgloss.NewStyle().
 			Background(lipgloss.Color("#3498DB")).
 			Foreground(lipgloss.Color("#FFFFFF")).

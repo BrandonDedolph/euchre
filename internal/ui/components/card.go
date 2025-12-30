@@ -65,7 +65,7 @@ func (c *CardView) renderFull() string {
 	_, borderStyle, _ := c.getStyles()
 
 	// Get foreground color for content based on suit
-	contentColor := lipgloss.Color("#2C3E50") // dark for clubs/spades
+	contentColor := lipgloss.Color("#000000") // black for clubs/spades
 	if c.Card.Suit == engine.Hearts || c.Card.Suit == engine.Diamonds {
 		contentColor = lipgloss.Color("#E74C3C") // red for hearts/diamonds
 	}
@@ -148,7 +148,7 @@ func (c *CardView) getStyles() (contentStyle, borderStyle, bgStyle lipgloss.Styl
 	if c.Card.Suit == engine.Hearts || c.Card.Suit == engine.Diamonds {
 		contentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C"))
 	} else {
-		contentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#2C3E50"))
+		contentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000"))
 	}
 
 	switch c.Style {
