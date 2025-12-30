@@ -104,12 +104,9 @@ func (g *GameSetup) View() string {
 
 	title := theme.Current.Title.Render("Game Setup")
 
-	// Wrap menu in content box with dynamic size (min 40x8)
-	boxWidth := max(40, width/2)
-	boxHeight := max(8, height/4)
+	// Wrap menu in content box with fixed size
 	menuBox := theme.Current.ContentBox.
-		Width(boxWidth).
-		Height(boxHeight).
+		Width(40).
 		Render(g.menu.Render())
 
 	help := theme.Current.Help.Render("↑/↓: Navigate • Enter: Select/Toggle • Esc: Back")
