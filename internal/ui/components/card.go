@@ -113,21 +113,21 @@ func (c *CardView) renderCompact() string {
 
 // renderFaceDown renders a face-down card
 func (c *CardView) renderFaceDown() string {
+	borderStyle := theme.Current.Muted
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+
+	border := borderStyle.Render
+	pattern := patternStyle.Render
+
 	lines := []string{
-		"┌─────┐",
-		"│░░░░░│",
-		"│░░░░░│",
-		"│░░░░░│",
-		"└─────┘",
+		border("┌─────┐"),
+		border("│") + pattern("╳╳╳╳╳") + border("│"),
+		border("│") + pattern("╳╳╳╳╳") + border("│"),
+		border("│") + pattern("╳╳╳╳╳") + border("│"),
+		border("└─────┘"),
 	}
 
-	style := theme.Current.Muted
-	styled := make([]string, len(lines))
-	for i, line := range lines {
-		styled[i] = style.Render(line)
-	}
-
-	return strings.Join(styled, "\n")
+	return strings.Join(lines, "\n")
 }
 
 // getStyle returns the appropriate lipgloss style (for compact rendering)
@@ -251,15 +251,19 @@ func RenderFaceDown(count int) string {
 		return ""
 	}
 
-	style := theme.Current.Muted
+	borderStyle := theme.Current.Muted
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+
+	border := borderStyle.Render
+	pattern := patternStyle.Render
 
 	// Build overlapping cards horizontally
 	// Each card shows just left edge except the last one shows fully
 	// Card structure:
 	// ┌─────┐
-	// │░░░░░│
-	// │░░░░░│
-	// │░░░░░│
+	// │╳╳╳╳╳│
+	// │╳╳╳╳╳│
+	// │╳╳╳╳╳│
 	// └─────┘
 
 	var lines [5]string
@@ -267,18 +271,18 @@ func RenderFaceDown(count int) string {
 	for i := 0; i < count; i++ {
 		if i < count-1 {
 			// Overlapping card - just show left edge (2 chars)
-			lines[0] += style.Render("┌─")
-			lines[1] += style.Render("│░")
-			lines[2] += style.Render("│░")
-			lines[3] += style.Render("│░")
-			lines[4] += style.Render("└─")
+			lines[0] += border("┌─")
+			lines[1] += border("│") + pattern("╳")
+			lines[2] += border("│") + pattern("╳")
+			lines[3] += border("│") + pattern("╳")
+			lines[4] += border("└─")
 		} else {
 			// Last card - show full
-			lines[0] += style.Render("┌─────┐")
-			lines[1] += style.Render("│░░░░░│")
-			lines[2] += style.Render("│░░░░░│")
-			lines[3] += style.Render("│░░░░░│")
-			lines[4] += style.Render("└─────┘")
+			lines[0] += border("┌─────┐")
+			lines[1] += border("│") + pattern("╳╳╳╳╳") + border("│")
+			lines[2] += border("│") + pattern("╳╳╳╳╳") + border("│")
+			lines[3] += border("│") + pattern("╳╳╳╳╳") + border("│")
+			lines[4] += border("└─────┘")
 		}
 	}
 
@@ -289,12 +293,16 @@ func RenderFaceDown(count int) string {
 // Cards are 9 wide x 4 tall, stacked with 1-line overlaps
 // If reversed is true, cards stack upward (bottoms showing) instead of downward (tops showing)
 func RenderFaceDownVertical(count int, reversed bool) string {
-	style := theme.Current.Muted
+	borderStyle := theme.Current.Muted
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+
+	border := borderStyle.Render
+	pattern := patternStyle.Render
 
 	// Card (9 wide x 4 tall):
 	// ┌───────┐
-	// │░░░░░░░│
-	// │░░░░░░░│
+	// │╳╳╳╳╳╳╳│
+	// │╳╳╳╳╳╳╳│
 	// └───────┘
 	const maxCards = 5
 	const linesPerOverlap = 1
@@ -304,6 +312,9 @@ func RenderFaceDownVertical(count int, reversed bool) string {
 	var sb strings.Builder
 	cardWidth := 9 // "┌───────┐" is 9 chars wide
 	emptyLine := strings.Repeat(" ", cardWidth)
+
+	// Helper for interior line
+	interiorLine := border("│") + pattern("╳╳╳╳╳╳╳") + border("│")
 
 	// Handle empty case
 	if count == 0 {
@@ -328,33 +339,33 @@ func RenderFaceDownVertical(count int, reversed bool) string {
 		}
 
 		// Full card
-		sb.WriteString(style.Render("┌───────┐"))
+		sb.WriteString(border("┌───────┐"))
 		sb.WriteString("\n")
-		sb.WriteString(style.Render("│░░░░░░░│"))
+		sb.WriteString(interiorLine)
 		sb.WriteString("\n")
-		sb.WriteString(style.Render("│░░░░░░░│"))
+		sb.WriteString(interiorLine)
 		sb.WriteString("\n")
-		sb.WriteString(style.Render("└───────┘"))
+		sb.WriteString(border("└───────┘"))
 
 		// Then bottom edges of cards behind
 		for i := 1; i < count; i++ {
 			sb.WriteString("\n")
-			sb.WriteString(style.Render("└───────┘"))
+			sb.WriteString(border("└───────┘"))
 		}
 	} else {
 		// Top edges of cards behind first
 		for i := 0; i < count-1; i++ {
-			sb.WriteString(style.Render("┌───────┐"))
+			sb.WriteString(border("┌───────┐"))
 			sb.WriteString("\n")
 		}
 		// Then full card at bottom
-		sb.WriteString(style.Render("┌───────┐"))
+		sb.WriteString(border("┌───────┐"))
 		sb.WriteString("\n")
-		sb.WriteString(style.Render("│░░░░░░░│"))
+		sb.WriteString(interiorLine)
 		sb.WriteString("\n")
-		sb.WriteString(style.Render("│░░░░░░░│"))
+		sb.WriteString(interiorLine)
 		sb.WriteString("\n")
-		sb.WriteString(style.Render("└───────┘"))
+		sb.WriteString(border("└───────┘"))
 
 		// Pad with empty lines at bottom
 		cardLines := 4 + (count - 1)
