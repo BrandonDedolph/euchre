@@ -114,16 +114,16 @@ func (c *CardView) renderCompact() string {
 // renderFaceDown renders a face-down card
 func (c *CardView) renderFaceDown() string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
 
 	lines := []string{
 		border("┌─────┐"),
-		border("│") + pattern("╳╳╳╳╳") + border("│"),
-		border("│") + pattern("╳╳╳╳╳") + border("│"),
-		border("│") + pattern("╳╳╳╳╳") + border("│"),
+		border("│") + pattern("░░░░░") + border("│"),
+		border("│") + pattern("░░░░░") + border("│"),
+		border("│") + pattern("░░░░░") + border("│"),
 		border("└─────┘"),
 	}
 
@@ -252,7 +252,7 @@ func RenderFaceDown(count int) string {
 	}
 
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
@@ -261,9 +261,9 @@ func RenderFaceDown(count int) string {
 	// Each card shows just left edge except the last one shows fully
 	// Card structure:
 	// ┌─────┐
-	// │╳╳╳╳╳│
-	// │╳╳╳╳╳│
-	// │╳╳╳╳╳│
+	// │░░░░░│
+	// │░░░░░│
+	// │░░░░░│
 	// └─────┘
 
 	var lines [5]string
@@ -272,16 +272,16 @@ func RenderFaceDown(count int) string {
 		if i < count-1 {
 			// Overlapping card - just show left edge (2 chars)
 			lines[0] += border("┌─")
-			lines[1] += border("│") + pattern("╳")
-			lines[2] += border("│") + pattern("╳")
-			lines[3] += border("│") + pattern("╳")
+			lines[1] += border("│") + pattern("░")
+			lines[2] += border("│") + pattern("░")
+			lines[3] += border("│") + pattern("░")
 			lines[4] += border("└─")
 		} else {
 			// Last card - show full
 			lines[0] += border("┌─────┐")
-			lines[1] += border("│") + pattern("╳╳╳╳╳") + border("│")
-			lines[2] += border("│") + pattern("╳╳╳╳╳") + border("│")
-			lines[3] += border("│") + pattern("╳╳╳╳╳") + border("│")
+			lines[1] += border("│") + pattern("░░░░░") + border("│")
+			lines[2] += border("│") + pattern("░░░░░") + border("│")
+			lines[3] += border("│") + pattern("░░░░░") + border("│")
 			lines[4] += border("└─────┘")
 		}
 	}
@@ -294,15 +294,15 @@ func RenderFaceDown(count int) string {
 // If reversed is true, cards stack upward (bottoms showing) instead of downward (tops showing)
 func RenderFaceDownVertical(count int, reversed bool) string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
 
 	// Card (9 wide x 4 tall):
 	// ┌───────┐
-	// │╳╳╳╳╳╳╳│
-	// │╳╳╳╳╳╳╳│
+	// │░░░░░░░│
+	// │░░░░░░░│
 	// └───────┘
 	const maxCards = 5
 	const linesPerOverlap = 1
@@ -314,7 +314,7 @@ func RenderFaceDownVertical(count int, reversed bool) string {
 	emptyLine := strings.Repeat(" ", cardWidth)
 
 	// Helper for interior line
-	interiorLine := border("│") + pattern("╳╳╳╳╳╳╳") + border("│")
+	interiorLine := border("│") + pattern("░░░░░░░") + border("│")
 
 	// Handle empty case
 	if count == 0 {

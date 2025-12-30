@@ -407,7 +407,7 @@ func (t *TableView) renderTurnIndicator() string {
 // renderFlipAnimation renders the card flip animation at given progress (0.0 to 1.0)
 func (t *TableView) renderFlipAnimation(progress float64) string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
@@ -416,9 +416,9 @@ func (t *TableView) renderFlipAnimation(progress float64) string {
 		// Stage 1: Face-down card
 		lines := []string{
 			border("┌─────┐"),
-			border("│") + pattern("╳╳╳╳╳") + border("│"),
-			border("│") + pattern("╳╳╳╳╳") + border("│"),
-			border("│") + pattern("╳╳╳╳╳") + border("│"),
+			border("│") + pattern("░░░░░") + border("│"),
+			border("│") + pattern("░░░░░") + border("│"),
+			border("│") + pattern("░░░░░") + border("│"),
 			border("└─────┘"),
 		}
 		return strings.Join(lines, "\n")
@@ -426,9 +426,9 @@ func (t *TableView) renderFlipAnimation(progress float64) string {
 		// Stage 2: Card flipping (narrow)
 		lines := []string{
 			"  " + border("┌─┐") + "  ",
-			"  " + border("│") + pattern("╳") + border("│") + "  ",
-			"  " + border("│") + pattern("╳") + border("│") + "  ",
-			"  " + border("│") + pattern("╳") + border("│") + "  ",
+			"  " + border("│") + pattern("░") + border("│") + "  ",
+			"  " + border("│") + pattern("░") + border("│") + "  ",
+			"  " + border("│") + pattern("░") + border("│") + "  ",
 			"  " + border("└─┘") + "  ",
 		}
 		return strings.Join(lines, "\n")

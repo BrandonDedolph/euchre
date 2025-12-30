@@ -1132,12 +1132,12 @@ func (g *GamePlay) View() string {
 // renderShuffleAnimation renders the deck shuffling animation
 func (g *GamePlay) renderShuffleAnimation(width, height int) string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#C0392B"))
+	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#B22222"))
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
 
-	// Helper to build a deck frame with colored crosshatch
+	// Helper to build a deck frame with colored pattern
 	// p = pattern interior, d = depth chars (border colored)
 	buildDeck := func(p string, depth int) string {
 		depthStr := border(repeatChar('┐', depth))
@@ -1173,34 +1173,34 @@ func (g *GamePlay) renderShuffleAnimation(width, height int) string {
 
 	switch frameNum {
 	case 0: // Start - single deck with depth
-		deckArt = buildDeck("╳╳╳╳╳", 1)
+		deckArt = buildDeck("░░░░░", 1)
 	case 1: // Thicken
-		deckArt = buildDeck("╳╳╳╳╳", 2)
+		deckArt = buildDeck("░░░░░", 2)
 	case 2: // Full thickness
-		deckArt = buildDeck("╳╳╳╳╳", 3)
+		deckArt = buildDeck("░░░░░", 3)
 	case 3: // Cut - split
-		deckArt = buildSplitDecks("╳╳╳╳╳", 1, "    ")
+		deckArt = buildSplitDecks("░░░░░", 1, "    ")
 	case 4: // Wide split
-		deckArt = buildSplitDecks("╳╳╳╳╳", 1, "      ")
+		deckArt = buildSplitDecks("░░░░░", 1, "      ")
 	case 5: // Coming together
-		deckArt = buildSplitDecks("╳╳╳╳╳", 1, " ")
+		deckArt = buildSplitDecks("░░░░░", 1, " ")
 	case 6: // Merged
-		deckArt = buildDeck("╳╳╳╳╳", 4)
+		deckArt = buildDeck("░░░░░", 4)
 	case 7: // Settling
-		deckArt = buildDeck("╳╳╳╳╳", 3)
+		deckArt = buildDeck("░░░░░", 3)
 	case 8: // More settling
-		deckArt = buildDeck("╳╳╳╳╳", 2)
+		deckArt = buildDeck("░░░░░", 2)
 	case 9: // Almost done
-		deckArt = buildDeck("╳╳╳╳╳", 1)
+		deckArt = buildDeck("░░░░░", 1)
 	case 10: // Final
-		deckArt = buildDeck("╳╳╳╳╳", 0)
+		deckArt = buildDeck("░░░░░", 0)
 	case 11: // Done - highlight (brighter pattern)
-		highlightPattern := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
+		highlightPattern := lipgloss.NewStyle().Foreground(lipgloss.Color("#DC143C")).Bold(true)
 		hp := highlightPattern.Render
 		deckArt = border("┌─────┐") + "\n" +
-			border("│") + hp("╳╳╳╳╳") + border("│") + "\n" +
-			border("│") + hp("╳╳╳╳╳") + border("│") + "\n" +
-			border("│") + hp("╳╳╳╳╳") + border("│") + "\n" +
+			border("│") + hp("░░░░░") + border("│") + "\n" +
+			border("│") + hp("░░░░░") + border("│") + "\n" +
+			border("│") + hp("░░░░░") + border("│") + "\n" +
 			border("└─────┘")
 	}
 
