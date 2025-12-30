@@ -112,20 +112,20 @@ func (t *TableView) renderTopPlayer() string {
 		dealerBadge = " " + dealerStyle.Render("DEALER")
 	}
 
-	header := fmt.Sprintf("%s%s%s", name, indicator, dealerBadge)
+	// Compact header with inline tricks
+	tricksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	tricksStr := tricksStyle.Render(fmt.Sprintf("(%d)", tricks))
+	header := fmt.Sprintf("%s%s %s%s", name, indicator, tricksStr, dealerBadge)
 	header = lipgloss.PlaceHorizontal(t.Width, lipgloss.Center, header)
-
-	tricksTable := RenderTricksTable(tricks)
-	tricksTable = lipgloss.PlaceHorizontal(t.Width, lipgloss.Center, tricksTable)
 
 	// Show face-down cards (always show space for 5 cards even if fewer)
 	cardDisplay := RenderFaceDown(min(cards, 5))
 	cardDisplay = lipgloss.PlaceHorizontal(t.Width, lipgloss.Center, cardDisplay)
 
-	content := header + "\n" + tricksTable + "\n" + cardDisplay
+	content := header + "\n" + cardDisplay
 
 	// Fixed height to prevent layout shift
-	return lipgloss.NewStyle().Height(10).Render(content)
+	return lipgloss.NewStyle().Height(7).Render(content)
 }
 
 // renderMiddle renders the middle section with left player, trick, right player

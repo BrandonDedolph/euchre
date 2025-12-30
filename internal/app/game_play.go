@@ -1008,27 +1008,26 @@ func (g *GamePlay) View() string {
 			playerTricks = round.TricksWon(g.humanPlayer)
 		}
 
-		// Build player header with name and dealer badge
-		playerName := theme.Current.Primary.Render("You")
+		// Build player header with name, inline tricks, and dealer badge
+		tricksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+		tricksStr := tricksStyle.Render(fmt.Sprintf("(%d)", playerTricks))
+		playerName := theme.Current.Primary.Render("You") + " " + tricksStr
 		if g.game.Dealer() == g.humanPlayer {
 			playerName += " " + dealerStyle.Render("DEALER")
 		}
-
-		// Show tricks table (or suit selector during round 2 bidding)
-		tricksTable := components.RenderTricksTable(playerTricks)
 
 		// Build header - center everything for consistent layout
 		var playerHeader string
 		phase := g.game.Phase()
 		if phase == engine.PhaseBidRound2 && g.game.CurrentPlayer() == g.humanPlayer && g.suitSelector != nil {
-			// Show suit selector in place of tricks during round 2 bidding
+			// Show suit selector below name during round 2 bidding
 			suitSelectorWidget := g.suitSelector.Render()
 			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, suitSelectorWidget)
 		} else if phase == engine.PhaseDiscard && len(hand) == 6 {
 			discardMsg := theme.Current.Muted.Render("(select one to discard)")
-			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, tricksTable, discardMsg)
+			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, discardMsg)
 		} else {
-			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, tricksTable)
+			playerHeader = playerName
 		}
 
 		legalPlays := make([]engine.Card, 0)
@@ -1046,7 +1045,7 @@ func (g *GamePlay) View() string {
 				cardNames[i] = c.String()
 			}
 			bugMsg := theme.Current.CardRed.Render(fmt.Sprintf("BUG: You have %d cards: %v", len(hand), cardNames))
-			playerHeader = lipgloss.JoinVertical(lipgloss.Center, bugMsg, tricksTable)
+			playerHeader = lipgloss.JoinVertical(lipgloss.Center, bugMsg, playerName)
 		}
 
 		// Only show selection when it's your turn to select a card
@@ -1063,8 +1062,8 @@ func (g *GamePlay) View() string {
 		handStr = lipgloss.JoinVertical(lipgloss.Center, playerHeader, handCards)
 	}
 
-	// Fixed height for hand area (1 name + 3 tricks table + 1 blank + 5 cards + 1 raised = 11)
-	handStr = lipgloss.NewStyle().Height(11).Render(handStr)
+	// Fixed height for hand area (1 name + 5 cards + 1 raised = 7)
+	handStr = lipgloss.NewStyle().Height(7).Render(handStr)
 
 	// Build status bar with phase message (trump info now in side panel)
 	phaseStr := g.getPhaseMessage()
