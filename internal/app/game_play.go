@@ -1426,7 +1426,7 @@ func (g *GamePlay) renderRightPanel(height int) string {
 			bgColor = lipgloss.Color("#E74C3C") // Red
 			fgColor = lipgloss.Color("#FFFFFF")
 		} else {
-			bgColor = lipgloss.Color("#2C3E50") // Dark
+			bgColor = lipgloss.Color("#000000") // Black
 			fgColor = lipgloss.Color("#FFFFFF")
 		}
 		trumpStyle := lipgloss.NewStyle().
