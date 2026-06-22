@@ -98,7 +98,11 @@ func (a *App) navigate(screen Screen, data interface{}) (*App, tea.Cmd) {
 	case ScreenGameSetup:
 		a.screenModels[screen] = NewGameSetup()
 	case ScreenGamePlay:
-		a.screenModels[screen] = NewGamePlay()
+		if settings, ok := data.(GameSettings); ok {
+			a.screenModels[screen] = NewGamePlayWithSettings(settings)
+		} else {
+			a.screenModels[screen] = NewGamePlay()
+		}
 	case ScreenQuickReference:
 		a.screenModels[screen] = NewQuickReference()
 	case ScreenLearningJourney:

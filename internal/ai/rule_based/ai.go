@@ -99,6 +99,73 @@ func (a *AI) DecideDiscard(state *engine.GameState, hand []engine.Card) engine.C
 	return a.bidder.SelectDiscard(hand, turnedCard)
 }
 
+// DecideDefendAlone decides whether to declare a lone defense against a lone
+// maker. Defending alone is high risk: you must take 3+ of 5 tricks single-
+// handed to euchre the maker (for 4 points), so the AI is conservative and
+// declines unless the hand is genuinely strong against the known trump.
+func (a *AI) DecideDefendAlone(state *engine.GameState) bool {
+	hand := state.Hand(a.playerIdx)
+	trump := state.Trump()
+	return shouldDefendAlone(hand, trump)
+}
+
+// shouldDefendAlone is a pure helper that decides whether a hand is strong
+// enough to defend alone against a lone maker for the given trump suit.
+//
+// It is deliberately conservative (declining is the default). It only accepts
+// when the hand offers a realistic shot at 3 tricks single-handed:
+//   - holds the right bower, OR
+//   - holds the left bower plus at least one other trump, OR
+//   - holds 3 or more trump cards, OR
+//   - holds 2 trump including a bower plus an off-suit ace.
+func shouldDefendAlone(hand []engine.Card, trump engine.Suit) bool {
+	if trump == engine.NoSuit {
+		return false
+	}
+
+	trumpCount := 0
+	hasRightBower := false
+	hasLeftBower := false
+	offAces := 0
+	for _, card := range hand {
+		if card.IsTrump(trump) {
+			trumpCount++
+			if card.IsRightBower(trump) {
+				hasRightBower = true
+			}
+			if card.IsLeftBower(trump) {
+				hasLeftBower = true
+			}
+		} else if card.Rank == engine.Ace {
+			offAces++
+		}
+	}
+	hasBower := hasRightBower || hasLeftBower
+
+	// Right bower is the single strongest card; combined with any other trump
+	// or off-ace it gives a strong lone defense. Require it not be totally bare.
+	if hasRightBower && (trumpCount >= 2 || offAces >= 1) {
+		return true
+	}
+
+	// Left bower backed by another trump.
+	if hasLeftBower && trumpCount >= 2 {
+		return true
+	}
+
+	// Lots of trump length.
+	if trumpCount >= 3 {
+		return true
+	}
+
+	// Two trump including a bower, plus an off-suit ace for an extra trick.
+	if trumpCount >= 2 && hasBower && offAces >= 1 {
+		return true
+	}
+
+	return false
+}
+
 // CreateAIPlayers creates AI players for a game
 func CreateAIPlayers(humanPlayer int, difficulty ai.Difficulty) []ai.Player {
 	players := make([]ai.Player, 4)

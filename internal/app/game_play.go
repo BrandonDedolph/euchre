@@ -84,19 +84,33 @@ func rulesFromVariant(v variants.Variant) engine.Rules {
 	return rules
 }
 
-// NewGamePlay creates a new game play screen
+// NewGamePlay creates a new game play screen with default rules:
+// the standard variant with all optional rules off. This preserves the
+// behavior of the original constructor for callers that have no settings.
 func NewGamePlay() *GamePlay {
-	config := engine.DefaultGameConfig()
+	// Map the standard variant's default options onto the engine's plain Rules
+	// struct. The engine cannot import variants (that would be a circular
+	// import), so the app layer does this translation.
+	return newGamePlay(rulesFromVariant(standard.New()))
+}
 
-	// Map the selected variant's options onto the engine's plain Rules struct.
-	// The engine cannot import variants (that would be a circular import), so the
-	// app layer does this translation. Currently we use the standard variant; when
-	// variant selection is wired into GameSetup, resolve the chosen variant here:
-	//
-	//   v, _ := variants.Get(selectedVariantName)
-	//   config.Rules = rulesFromVariant(v)
-	//
-	config.Rules = rulesFromVariant(standard.New())
+// NewGamePlayWithSettings creates a new game play screen using the rule toggles
+// chosen on the setup screen.
+func NewGamePlayWithSettings(s GameSettings) *GamePlay {
+	rules := engine.Rules{
+		StickTheDealer:   s.StickTheDealer,
+		AllowMisdeal:     !s.StickTheDealer,
+		AllowDefendAlone: s.DefendAlone,
+	}
+	return newGamePlay(rules)
+}
+
+// newGamePlay is the shared constructor body. It builds the game from the given
+// engine rules and wires up the human/AI players, animation state, and starts
+// the first round.
+func newGamePlay(rules engine.Rules) *GamePlay {
+	config := engine.DefaultGameConfig()
+	config.Rules = rules
 
 	game := engine.NewGame(config)
 
@@ -518,6 +532,19 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		g.suitSelector = components.NewSuitSelector(g.game.TurnedCard().Suit)
 	}
 
+	// Defend-alone declaration window: only the polled human defender acts here.
+	if phase == engine.PhaseDefendAlone && g.game.CurrentPlayer() == g.humanPlayer {
+		switch msg.String() {
+		case "q", "esc":
+			return g, Navigate(ScreenMainMenu)
+		case "y":
+			return g.handleDefendAlone(true)
+		case "n", "p", "enter", " ":
+			return g.handleDefendAlone(false)
+		}
+		return g, nil
+	}
+
 	switch msg.String() {
 	case "q", "esc":
 		return g, Navigate(ScreenMainMenu)
@@ -733,6 +760,37 @@ func (g *GamePlay) handleAlone() (tea.Model, tea.Cmd) {
 	return g, g.processAITurns()
 }
 
+// handleDefendAlone handles the human declaring (or declining) a lone defense
+// during the PhaseDefendAlone declaration window.
+func (g *GamePlay) handleDefendAlone(declare bool) (tea.Model, tea.Cmd) {
+	if g.game.Phase() != engine.PhaseDefendAlone {
+		return g, nil
+	}
+	if g.game.CurrentPlayer() != g.humanPlayer {
+		return g.showTempMessage("Not your turn")
+	}
+
+	var action engine.Action
+	if declare {
+		action = engine.DefendAloneAction{PlayerIdx: g.humanPlayer}
+	} else {
+		action = engine.PassAction{PlayerIdx: g.humanPlayer}
+	}
+
+	if err := g.game.ApplyAction(action); err != nil {
+		g.message = err.Error()
+	} else {
+		if declare {
+			g.message = "You defend alone!"
+		} else {
+			g.message = "You decline to defend alone"
+		}
+		g.updateTableView()
+	}
+
+	return g, g.processAITurns()
+}
+
 // handleCallSuit handles calling a specific suit in round 2
 func (g *GamePlay) handleCallSuit(suit engine.Suit, alone bool) (tea.Model, tea.Cmd) {
 	phase := g.game.Phase()
@@ -824,6 +882,22 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 			action := engine.DiscardAction{PlayerIdx: current, Card: card}
 			if err := g.game.ApplyAction(action); err != nil {
 				return aiErrorMsg{err: err, player: current, action: "discard"}
+			}
+
+		case engine.PhaseDefendAlone:
+			playerName := g.tableView.PlayerNames[current]
+			if aiPlayer.DecideDefendAlone(state) {
+				action := engine.DefendAloneAction{PlayerIdx: current}
+				if err := g.game.ApplyAction(action); err != nil {
+					return aiErrorMsg{err: err, player: current, action: "defend-alone"}
+				}
+				g.message = fmt.Sprintf("%s defends alone!", playerName)
+			} else {
+				action := engine.PassAction{PlayerIdx: current}
+				if err := g.game.ApplyAction(action); err != nil {
+					return aiErrorMsg{err: err, player: current, action: "defend-alone-pass"}
+				}
+				g.message = fmt.Sprintf("%s declines to defend alone", playerName)
 			}
 
 		case engine.PhasePlay:
@@ -1107,7 +1181,7 @@ func (g *GamePlay) View() string {
 		// If it's the human's turn during bidding, combine the AI's message with the prompt
 		phase := g.game.Phase()
 		isYourTurn := g.game.CurrentPlayer() == g.humanPlayer
-		if isYourTurn && (phase == engine.PhaseBidRound1 || phase == engine.PhaseBidRound2) {
+		if isYourTurn && (phase == engine.PhaseBidRound1 || phase == engine.PhaseBidRound2 || phase == engine.PhaseDefendAlone) {
 			phaseStr = g.message + " — " + phaseStr
 		} else {
 			phaseStr = g.message
@@ -1318,6 +1392,12 @@ func (g *GamePlay) getPhaseMessage() string {
 		}
 		return "Dealer is picking up trump and discarding..."
 
+	case engine.PhaseDefendAlone:
+		if isYourTurn {
+			return "Opponent goes alone! Defend alone? (y = yes, n = no)"
+		}
+		return fmt.Sprintf("Waiting for %s to decide on a lone defense...", g.tableView.PlayerNames[current])
+
 	case engine.PhasePlay:
 		if isYourTurn {
 			return "Your turn: Select a card to play"
@@ -1358,6 +1438,11 @@ func (g *GamePlay) getHelpText() string {
 		return "←/→: Select suit • Enter: Call • P: Pass • Esc: Quit"
 	case engine.PhaseDiscard:
 		return "←/→: Select card • Enter: Discard • Esc: Quit"
+	case engine.PhaseDefendAlone:
+		if g.game.CurrentPlayer() == g.humanPlayer {
+			return "Y: Defend alone • N: Decline • Esc: Quit"
+		}
+		return "Esc: Quit"
 	case engine.PhasePlay:
 		return "←/→: Select card • Enter: Play • Esc: Quit"
 	default:
