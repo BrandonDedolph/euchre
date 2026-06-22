@@ -6,6 +6,7 @@ type Game struct {
 	numPlayers  int
 	targetScore int
 	deckConfig  DeckConfig
+	rules       Rules
 
 	// State
 	scores       []int
@@ -22,6 +23,7 @@ type GameConfig struct {
 	NumPlayers  int
 	TargetScore int
 	DeckConfig  DeckConfig
+	Rules       Rules
 }
 
 // DefaultGameConfig returns the standard 4-player Euchre configuration
@@ -30,6 +32,7 @@ func DefaultGameConfig() GameConfig {
 		NumPlayers:  4,
 		TargetScore: 10,
 		DeckConfig:  StandardDeckConfig{},
+		Rules:       DefaultRules(),
 	}
 }
 
@@ -51,6 +54,7 @@ func NewGame(config GameConfig) *Game {
 		numPlayers:   config.NumPlayers,
 		targetScore:  config.TargetScore,
 		deckConfig:   config.DeckConfig,
+		rules:        config.Rules,
 		scores:       make([]int, numTeams),
 		dealer:       0,
 		deck:         config.DeckConfig.CreateDeck(),
@@ -61,13 +65,19 @@ func NewGame(config GameConfig) *Game {
 // StartRound begins a new round
 func (g *Game) StartRound() {
 	g.deck = g.deckConfig.CreateDeck()
-	g.currentRound = NewRound(g.numPlayers, g.dealer)
+	g.currentRound = NewRoundWithRules(g.numPlayers, g.dealer, g.rules)
 	g.currentRound.Deal(g.deck)
 }
 
 // Round returns the current round
 func (g *Game) Round() *Round {
 	return g.currentRound
+}
+
+// IsMisdeal returns true if the current round ended as a throw-in (all passed in
+// round 2). A misdeal is not scored and the same dealer re-deals.
+func (g *Game) IsMisdeal() bool {
+	return g.currentRound != nil && g.currentRound.IsMisdeal()
 }
 
 // Score returns the score for a team
@@ -139,6 +149,16 @@ func (g *Game) ApplyAction(action Action) error {
 }
 
 func (g *Game) endRound() {
+	// A misdeal (round-2 throw-in) is not scored, not recorded, and the same
+	// dealer re-deals. Leave dealer and scores unchanged.
+	//
+	// Same-dealer re-deal is an intentional convention choice: it follows the
+	// World Euchre Federation / euchre.com rules. Note that pagat.com instead
+	// passes the deal to the next dealer on a throw-in; we deliberately do not.
+	if g.currentRound.IsMisdeal() {
+		return
+	}
+
 	result := g.currentRound.Result()
 	g.roundHistory = append(g.roundHistory, result)
 

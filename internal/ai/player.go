@@ -13,6 +13,10 @@ type Player interface {
 	// DecideDiscard chooses which card to discard (when dealer picks up)
 	DecideDiscard(state *engine.GameState, hand []engine.Card) engine.Card
 
+	// DecideDefendAlone decides whether to declare a lone defense against a lone
+	// maker (optional rule). Returns true to defend alone, false to decline.
+	DecideDefendAlone(state *engine.GameState) bool
+
 	// Name returns a display name for this AI
 	Name() string
 }

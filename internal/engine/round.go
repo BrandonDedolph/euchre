@@ -5,42 +5,55 @@ type Round struct {
 	// Configuration
 	numPlayers int
 	dealer     int
+	rules      Rules
 
 	// State
-	phase      GamePhase
-	trump      Suit
-	turnedCard Card
-	maker      int  // Player who called trump
-	makerTeam  int  // Team that called trump
-	alone      bool // Whether maker is going alone
-	aloneDefender int // -1 if no lone defender, else player idx
+	phase         GamePhase
+	misdeal       bool // true if round 2 all-pass throw-in occurred
+	trump         Suit
+	turnedCard    Card
+	maker         int  // Player who called trump
+	makerTeam     int  // Team that called trump
+	alone         bool // Whether maker is going alone
+	aloneDefender int  // -1 if no lone defender, else player idx
+
+	// defendAlonePoll is the defender currently being polled during
+	// PhaseDefendAlone, or -1 when not in that phase.
+	defendAlonePoll int
 
 	// Bidding state
 	bidRound      int // 1 or 2
 	currentBidder int
 
 	// Cards
-	hands       []*Hand
+	hands        []*Hand
 	currentTrick *Trick
-	tricksWon   []int // Tricks won by each player
+	tricksWon    []int // Tricks won by each player
 
 	// History
 	trickHistory []TrickResult
 }
 
-// NewRound creates a new round with the given dealer
+// NewRound creates a new round with the given dealer using the default rules.
 func NewRound(numPlayers, dealer int) *Round {
+	return NewRoundWithRules(numPlayers, dealer, DefaultRules())
+}
+
+// NewRoundWithRules creates a new round with the given dealer and rule configuration.
+func NewRoundWithRules(numPlayers, dealer int, rules Rules) *Round {
 	r := &Round{
-		numPlayers:    numPlayers,
-		dealer:        dealer,
-		phase:         PhaseDeal,
-		trump:         NoSuit,
-		maker:         -1,
-		makerTeam:     -1,
-		aloneDefender: -1,
-		hands:         make([]*Hand, numPlayers),
-		tricksWon:     make([]int, numPlayers),
-		trickHistory:  make([]TrickResult, 0, 5),
+		numPlayers:      numPlayers,
+		dealer:          dealer,
+		rules:           rules,
+		phase:           PhaseDeal,
+		trump:           NoSuit,
+		maker:           -1,
+		makerTeam:       -1,
+		aloneDefender:   -1,
+		defendAlonePoll: -1,
+		hands:           make([]*Hand, numPlayers),
+		tricksWon:       make([]int, numPlayers),
+		trickHistory:    make([]TrickResult, 0, 5),
 	}
 
 	for i := 0; i < numPlayers; i++ {
@@ -50,23 +63,48 @@ func NewRound(numPlayers, dealer int) *Round {
 	return r
 }
 
+// IsMisdeal returns true if the round ended as a throw-in (all passed in round 2
+// with stick-the-dealer off). A misdeal is not scored and does not rotate the dealer.
+func (r *Round) IsMisdeal() bool {
+	return r.misdeal
+}
+
+// dealPasses returns the two dealing passes (cards per deal position, left of
+// dealer first ... dealer last) for a deal of numPlayers.
+//
+// The authentic 4-player Euchre deal goes out in two passes with alternating
+// packet sizes ({2,3,2,3} then the complement {3,2,3,2}) that only sum to 5 per
+// player when there are exactly 4 players. For any other player count we fall
+// back to a simple uniform deal (3 then 2) so each player still receives 5.
+func dealPasses(numPlayers int) (first, second []int) {
+	first = make([]int, numPlayers)
+	second = make([]int, numPlayers)
+	if numPlayers == 4 {
+		copy(first, []int{2, 3, 2, 3})
+		copy(second, []int{3, 2, 3, 2})
+		return first, second
+	}
+	for i := 0; i < numPlayers; i++ {
+		first[i] = 3
+		second[i] = 2
+	}
+	return first, second
+}
+
 // Deal deals cards from the deck to all players
 func (r *Round) Deal(deck *Deck) {
 	deck.Shuffle()
 
-	// Deal 5 cards to each player (standard Euchre dealing pattern: 3-2 or 2-3)
-	// First round: 3 cards each
-	for i := 0; i < r.numPlayers; i++ {
-		playerIdx := NextPlayer(r.dealer+i, r.numPlayers)
-		cards := deck.DrawN(3)
-		r.hands[playerIdx].AddAll(cards)
-	}
+	// Deal ORDER is preserved: left of dealer first ... dealer last.
+	firstPass, secondPass := dealPasses(r.numPlayers)
 
-	// Second round: 2 cards each
 	for i := 0; i < r.numPlayers; i++ {
 		playerIdx := NextPlayer(r.dealer+i, r.numPlayers)
-		cards := deck.DrawN(2)
-		r.hands[playerIdx].AddAll(cards)
+		r.hands[playerIdx].AddAll(deck.DrawN(firstPass[i]))
+	}
+	for i := 0; i < r.numPlayers; i++ {
+		playerIdx := NextPlayer(r.dealer+i, r.numPlayers)
+		r.hands[playerIdx].AddAll(deck.DrawN(secondPass[i]))
 	}
 
 	// Turn up the next card
@@ -122,6 +160,8 @@ func (r *Round) CurrentPlayer() int {
 		return r.currentBidder
 	case PhaseDiscard:
 		return r.dealer
+	case PhaseDefendAlone:
+		return r.defendAlonePoll
 	case PhasePlay:
 		if r.currentTrick == nil || r.currentTrick.Size() == 0 {
 			// First trick: left of dealer leads
@@ -178,13 +218,27 @@ func (r *Round) nextToPlay() int {
 	return -1
 }
 
-// isSittingOut returns true if the player is sitting out (partner of lone player)
-func (r *Round) isSittingOut(playerIdx int) bool {
-	if !r.alone {
-		return false
+// isSittingOut returns true if the player is sitting out: the lone maker's
+// partner, and (if a defender declared defend-alone) the lone defender's partner.
+func (r *Round) isSittingOut(p int) bool {
+	if r.alone && p == Partner(r.maker) {
+		return true
 	}
-	// Maker's partner sits out
-	return playerIdx == Partner(r.maker)
+	if r.aloneDefender >= 0 && p == Partner(r.aloneDefender) {
+		return true
+	}
+	return false
+}
+
+// sittingOutCount returns how many players are sitting out this round.
+func (r *Round) sittingOutCount() int {
+	count := 0
+	for p := 0; p < r.numPlayers; p++ {
+		if r.isSittingOut(p) {
+			count++
+		}
+	}
+	return count
 }
 
 // Hand returns a copy of the specified player's hand
@@ -236,6 +290,8 @@ func (r *Round) ApplyAction(action Action) error {
 		return r.handleOrderUp(a)
 	case CallTrumpAction:
 		return r.handleCallTrump(a)
+	case DefendAloneAction:
+		return r.handleDefendAlone(a)
 	case DiscardAction:
 		return r.handleDiscard(a)
 	case PlayCardAction:
@@ -246,11 +302,32 @@ func (r *Round) ApplyAction(action Action) error {
 }
 
 func (r *Round) handlePass(action PassAction) error {
+	// During the defend-alone declaration window a passing defender declines and
+	// we advance to the next defender (or start play if none remain).
+	if r.phase == PhaseDefendAlone {
+		if action.PlayerIdx != r.defendAlonePoll {
+			return ErrNotYourTurn
+		}
+		next := r.nextDefenderToPoll(r.defendAlonePoll)
+		if next < 0 {
+			// All defenders passed: no lone defender, proceed to play.
+			r.startPlay()
+		} else {
+			r.defendAlonePoll = next
+		}
+		return nil
+	}
+
 	if r.phase != PhaseBidRound1 && r.phase != PhaseBidRound2 {
 		return PlayError("cannot pass in this phase")
 	}
 	if action.PlayerIdx != r.currentBidder {
 		return ErrNotYourTurn
+	}
+
+	// Stick-the-dealer: the dealer may not pass in round 2 and must name trump.
+	if r.phase == PhaseBidRound2 && r.rules.StickTheDealer && r.currentBidder == r.dealer {
+		return PlayError("stick-the-dealer: dealer must call trump and cannot pass")
 	}
 
 	// Move to next bidder
@@ -263,9 +340,19 @@ func (r *Round) handlePass(action PassAction) error {
 			r.bidRound = 2
 			r.phase = PhaseBidRound2
 		} else {
-			// All passed in round 2 - handle based on variant rules
-			// For stick-the-dealer, dealer must call
-			// For now, we'll just end the round (misdeal)
+			// All passed in round 2. Stick-the-dealer is handled earlier (the
+			// dealer cannot reach this all-pass branch because they may not pass),
+			// so here we resolve via the misdeal rule. AllowMisdeal gates a classic
+			// throw-in: re-deal with the same dealer, no score.
+			//
+			// Defensive fallback: if AllowMisdeal is somehow false here while
+			// stick-the-dealer is also off (a misconfiguration), bidding would
+			// otherwise dead-end with no way to resolve the round. We still fall
+			// back to a misdeal so the round can end. For a valid game exactly one
+			// of StickTheDealer / AllowMisdeal resolves an all-pass round 2.
+			if r.rules.AllowMisdeal || !r.rules.StickTheDealer {
+				r.misdeal = true
+			}
 			r.phase = PhaseRoundEnd
 		}
 	}
@@ -319,10 +406,108 @@ func (r *Round) handleCallTrump(action CallTrumpAction) error {
 		}
 	}
 
-	// No discard phase in round 2, go straight to play
+	// No discard phase in round 2. Either open the defend-alone declaration
+	// window (lone maker + rule on) or go straight to play.
+	r.beginPostTrump()
+
+	return nil
+}
+
+// beginPostTrump runs after trump is finalized (round-2 call, or round-1 order-up
+// once the dealer has discarded). If the maker is going alone and the
+// defend-alone rule is on, it opens the defend-alone declaration window
+// (PhaseDefendAlone). Otherwise it starts play immediately.
+//
+// NOTE: AI and TUI support for PhaseDefendAlone is a follow-up; the standard
+// variant defaults AllowDefendAlone to false, so the default game path never
+// enters this phase and the app/AI are unaffected.
+func (r *Round) beginPostTrump() {
+	if r.rules.AllowDefendAlone && r.alone {
+		r.phase = PhaseDefendAlone
+		r.defendAlonePoll = r.firstDefenderToPoll()
+		// If somehow no eligible defender exists, fall through to play.
+		if r.defendAlonePoll < 0 {
+			r.startPlay()
+		}
+		return
+	}
+	r.startPlay()
+}
+
+// pollOrder returns the seat order in which defenders are polled: left of the
+// dealer first ... dealer last (offsets 1, 2, ..., numPlayers-1, 0).
+func (r *Round) pollOrder() []int {
+	order := make([]int, r.numPlayers)
+	for i := 0; i < r.numPlayers; i++ {
+		order[i] = (r.dealer + 1 + i) % r.numPlayers
+	}
+	return order
+}
+
+// firstDefenderToPoll returns the first eligible defender (not on the maker
+// team, not already sitting out) in poll order, or -1 if none.
+func (r *Round) firstDefenderToPoll() int {
+	for _, p := range r.pollOrder() {
+		if Team(p) != r.makerTeam && !r.isSittingOut(p) {
+			return p
+		}
+	}
+	return -1
+}
+
+// nextDefenderToPoll returns the next eligible defender to poll after `from`, or
+// -1 if there are no more. Each seat is visited exactly once per round, so
+// polling terminates rather than wrapping around forever.
+func (r *Round) nextDefenderToPoll(from int) int {
+	order := r.pollOrder()
+	seen := false
+	for _, p := range order {
+		if seen && Team(p) != r.makerTeam && !r.isSittingOut(p) {
+			return p
+		}
+		if p == from {
+			seen = true
+		}
+	}
+	return -1
+}
+
+// startPlay transitions into the play phase and starts the opening trick. This
+// is the single place the play trick is created on the bidding->play transition.
+func (r *Round) startPlay() {
+	r.defendAlonePoll = -1
 	r.phase = PhasePlay
 	r.currentTrick = NewTrick(r.trump)
+}
 
+// handleDefendAlone lets a defender declare they will defend alone for 4 points.
+// Only legal during the pre-lead defend-alone declaration window, when the maker
+// is going alone, the declaring player is the defender currently being polled
+// (on the defending team), the rule is enabled, and no defender has already
+// declared. Declaring sits out the defender's partner and starts play.
+func (r *Round) handleDefendAlone(action DefendAloneAction) error {
+	if !r.rules.AllowDefendAlone {
+		return PlayError("defend-alone is not allowed by the current rules")
+	}
+	if r.phase != PhaseDefendAlone {
+		return PlayError("defend-alone can only be declared during the defend-alone window")
+	}
+	if !r.alone {
+		return PlayError("defend-alone is only allowed when the maker is going alone")
+	}
+	if r.aloneDefender >= 0 {
+		return PlayError("a defender has already declared defend-alone")
+	}
+	if Team(action.PlayerIdx) == r.makerTeam {
+		return PlayError("only a defender may declare defend-alone")
+	}
+	if action.PlayerIdx != r.defendAlonePoll {
+		return ErrNotYourTurn
+	}
+
+	r.aloneDefender = action.PlayerIdx
+	// One defender declaring ends the window; proceed to play.
+	r.startPlay()
 	return nil
 }
 
@@ -359,8 +544,7 @@ func (r *Round) handleDiscard(action DiscardAction) error {
 		}
 	}
 
-	r.phase = PhasePlay
-	r.currentTrick = NewTrick(r.trump)
+	r.beginPostTrump()
 
 	return nil
 }
@@ -390,11 +574,9 @@ func (r *Round) handlePlayCard(action PlayCardAction) error {
 	hand.Remove(action.Card)
 	r.currentTrick.Play(action.PlayerIdx, action.Card)
 
-	// Check if trick is complete
-	playersInTrick := r.numPlayers
-	if r.alone {
-		playersInTrick-- // Partner sits out
-	}
+	// Check if trick is complete. Count active players (those not sitting out):
+	// the lone maker's partner and any lone defender's partner sit out.
+	playersInTrick := r.numPlayers - r.sittingOutCount()
 
 	if r.currentTrick.Size() >= playersInTrick {
 		r.completeTrick()
@@ -432,8 +614,12 @@ func (r *Round) Result() RoundResult {
 	}
 
 	if result.WasEuchred {
-		// Defenders score 2 points for euchre
+		// Defenders score 2 points for a euchre, or 4 if a defender went alone.
 		result.DefendPoints = 2
+		if r.aloneDefender >= 0 {
+			result.WasDefendedAlone = true
+			result.DefendPoints = 4
+		}
 	} else if makerTricks == 5 {
 		// March (all 5 tricks)
 		if r.alone {
@@ -476,7 +662,10 @@ func (r *Round) LegalActions() []Action {
 		actions = append(actions, OrderUpAction{PlayerIdx: player, Alone: true})
 
 	case PhaseBidRound2:
-		actions = append(actions, PassAction{PlayerIdx: player})
+		// Under stick-the-dealer the dealer cannot pass; they must name a suit.
+		if !(r.rules.StickTheDealer && player == r.dealer) {
+			actions = append(actions, PassAction{PlayerIdx: player})
+		}
 		// Can call any suit except the turned card's suit
 		for _, suit := range []Suit{Clubs, Diamonds, Hearts, Spades} {
 			if suit != r.turnedCard.Suit {
@@ -490,6 +679,11 @@ func (r *Round) LegalActions() []Action {
 		for _, card := range r.hands[r.dealer].Cards() {
 			actions = append(actions, DiscardAction{PlayerIdx: player, Card: card})
 		}
+
+	case PhaseDefendAlone:
+		// The polled defender may declare defend-alone or pass.
+		actions = append(actions, DefendAloneAction{PlayerIdx: player})
+		actions = append(actions, PassAction{PlayerIdx: player})
 
 	case PhasePlay:
 		// Can play any legal card

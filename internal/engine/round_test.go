@@ -22,6 +22,7 @@ func TestNewRound(t *testing.T) {
 func TestRoundDeal(t *testing.T) {
 	round := NewRound(4, 0)
 	deck := NewStandardDeck()
+	deck.Seed(1) // Deterministic shuffle for a stable assertion
 
 	round.Deal(deck)
 
@@ -38,15 +39,107 @@ func TestRoundDeal(t *testing.T) {
 		t.Errorf("Should be in bid round 1, got %s", round.Phase())
 	}
 
-	// Turned card should be set
+	// Turned card should genuinely be set aside: it must not be in anyone's hand
 	turnedCard := round.TurnedCard()
-	if turnedCard.Rank == 0 && turnedCard.Suit == 0 {
-		t.Error("Turned card should be set")
+	for i := 0; i < 4; i++ {
+		for _, c := range round.Hand(i) {
+			if c == turnedCard {
+				t.Errorf("Turned card %s should not be in player %d's hand", turnedCard, i)
+			}
+		}
 	}
 
 	// Current player should be left of dealer
 	if round.CurrentPlayer() != 1 {
 		t.Errorf("Current player should be 1 (left of dealer 0), got %d", round.CurrentPlayer())
+	}
+}
+
+func TestDealPassesFourPlayerAlternates(t *testing.T) {
+	// 4-player Euchre uses authentic alternating packets: {2,3,2,3} then the
+	// complement {3,2,3,2}, summing to 5 per player.
+	first, second := dealPasses(4)
+	wantFirst := []int{2, 3, 2, 3}
+	wantSecond := []int{3, 2, 3, 2}
+
+	if len(first) != 4 || len(second) != 4 {
+		t.Fatalf("4-player passes should have length 4, got %d and %d", len(first), len(second))
+	}
+	for i := 0; i < 4; i++ {
+		if first[i] != wantFirst[i] || second[i] != wantSecond[i] {
+			t.Fatalf("4-player packet mismatch at %d: got (%d,%d) want (%d,%d)",
+				i, first[i], second[i], wantFirst[i], wantSecond[i])
+		}
+		if first[i]+second[i] != 5 {
+			t.Errorf("player at deal position %d should receive 5 cards, got %d", i, first[i]+second[i])
+		}
+	}
+}
+
+func TestDealPassesNonFourPlayerFallsBackToUniform(t *testing.T) {
+	// For non-4-player counts the alternating pattern does not sum to 5, so the
+	// deal falls back to a simple uniform 3-then-2 split.
+	for _, n := range []int{2, 3, 5, 6} {
+		first, second := dealPasses(n)
+		if len(first) != n || len(second) != n {
+			t.Fatalf("n=%d: passes should have length %d, got %d and %d", n, n, len(first), len(second))
+		}
+		for i := 0; i < n; i++ {
+			if first[i] != 3 || second[i] != 2 {
+				t.Errorf("n=%d: uniform deal expected (3,2) at position %d, got (%d,%d)", n, i, first[i], second[i])
+			}
+			if first[i]+second[i] != 5 {
+				t.Errorf("n=%d: player at position %d should receive 5 cards, got %d", n, i, first[i]+second[i])
+			}
+		}
+	}
+}
+
+func TestRoundDealFourPlayerEachGetsFive(t *testing.T) {
+	round := NewRound(4, 0)
+	deck := NewStandardDeck()
+	deck.Seed(7)
+	round.Deal(deck)
+	for i := 0; i < 4; i++ {
+		if len(round.Hand(i)) != 5 {
+			t.Errorf("player %d should have 5 cards, got %d", i, len(round.Hand(i)))
+		}
+	}
+}
+
+func TestRoundDealDistinctCards(t *testing.T) {
+	round := NewRound(4, 0)
+	deck := NewStandardDeck()
+	deck.Seed(7)
+	round.Deal(deck)
+
+	seen := make(map[Card]bool)
+	total := 0
+	for i := 0; i < 4; i++ {
+		hand := round.Hand(i)
+		if len(hand) != 5 {
+			t.Errorf("player %d should have exactly 5 cards, got %d", i, len(hand))
+		}
+		for _, c := range hand {
+			if seen[c] {
+				t.Errorf("duplicate card dealt: %s", c)
+			}
+			seen[c] = true
+			total++
+		}
+	}
+	// Add the turned card; all 21 must be distinct.
+	tc := round.TurnedCard()
+	if seen[tc] {
+		t.Errorf("turned card %s duplicates a dealt card", tc)
+	}
+	seen[tc] = true
+
+	if total != 20 {
+		t.Errorf("expected 20 dealt cards, got %d", total)
+	}
+	if len(seen) != 21 {
+		t.Errorf("expected 21 distinct cards (20 dealt + turned), got %d", len(seen))
 	}
 }
 

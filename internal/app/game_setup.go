@@ -7,11 +7,20 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// GameSettings is the payload passed from the setup screen to game play,
+// describing the rule toggles chosen by the player.
+type GameSettings struct {
+	Variant        string
+	StickTheDealer bool
+	DefendAlone    bool
+}
+
 // GameSetup is the game setup screen
 type GameSetup struct {
 	menu           *components.Menu
 	variant        string
 	stickTheDealer bool
+	defendAlone    bool
 	width          int
 	height         int
 }
@@ -30,6 +39,10 @@ func NewGameSetup() *GameSetup {
 		{
 			Label:       "Stick the Dealer: Off",
 			Description: "Dealer must call if everyone passes",
+		},
+		{
+			Label:       "Defend Alone: Off",
+			Description: "Allow defenders to go alone for 4 points on euchre",
 		},
 		{
 			Label:       "Back to Menu",
@@ -74,9 +87,13 @@ func (g *GameSetup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (g *GameSetup) handleSelect() (tea.Model, tea.Cmd) {
 	switch g.menu.Selected {
 	case 0: // Start Game
-		return g, Navigate(ScreenGamePlay)
+		return g, NavigateWithData(ScreenGamePlay, GameSettings{
+			Variant:        g.variant,
+			StickTheDealer: g.stickTheDealer,
+			DefendAlone:    g.defendAlone,
+		})
 	case 1: // Variant toggle
-		// TODO: Cycle through variants
+		// TODO: Cycle through variants (only Standard exists for now)
 	case 2: // Stick the Dealer toggle
 		g.stickTheDealer = !g.stickTheDealer
 		if g.stickTheDealer {
@@ -84,7 +101,14 @@ func (g *GameSetup) handleSelect() (tea.Model, tea.Cmd) {
 		} else {
 			g.menu.Items[2].Label = "Stick the Dealer: Off"
 		}
-	case 3: // Back
+	case 3: // Defend Alone toggle
+		g.defendAlone = !g.defendAlone
+		if g.defendAlone {
+			g.menu.Items[3].Label = "Defend Alone: On"
+		} else {
+			g.menu.Items[3].Label = "Defend Alone: Off"
+		}
+	case 4: // Back
 		return g, Navigate(ScreenMainMenu)
 	}
 

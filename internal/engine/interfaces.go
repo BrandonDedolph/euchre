@@ -4,14 +4,15 @@ package engine
 type GamePhase int
 
 const (
-	PhaseDeal GamePhase = iota
-	PhaseBidRound1  // Order up or pass
-	PhaseBidRound2  // Name trump or pass (if all passed round 1)
-	PhaseDiscard    // Dealer discards if trump was ordered up
-	PhasePlay       // Card play
-	PhaseTrickEnd   // Brief pause after trick ends
-	PhaseRoundEnd   // Round scoring
-	PhaseGameEnd    // Game is over
+	PhaseDeal        GamePhase = iota
+	PhaseBidRound1             // Order up or pass
+	PhaseBidRound2             // Name trump or pass (if all passed round 1)
+	PhaseDiscard               // Dealer discards if trump was ordered up
+	PhaseDefendAlone           // Lone-maker hand: poll defenders for defend-alone (optional rule)
+	PhasePlay                  // Card play
+	PhaseTrickEnd              // Brief pause after trick ends
+	PhaseRoundEnd              // Round scoring
+	PhaseGameEnd               // Game is over
 )
 
 func (p GamePhase) String() string {
@@ -24,6 +25,8 @@ func (p GamePhase) String() string {
 		return "Bid Round 2"
 	case PhaseDiscard:
 		return "Discard"
+	case PhaseDefendAlone:
+		return "Defend Alone"
 	case PhasePlay:
 		return "Play"
 	case PhaseTrickEnd:
@@ -41,13 +44,13 @@ func (p GamePhase) String() string {
 type ActionType int
 
 const (
-	ActionPass ActionType = iota
-	ActionOrderUp     // Accept turned card as trump
-	ActionCallTrump   // Name a trump suit
-	ActionGoAlone     // Play without partner
-	ActionDefendAlone // Defend without partner (optional rule)
-	ActionDiscard     // Dealer discards a card
-	ActionPlayCard    // Play a card to the trick
+	ActionPass        ActionType = iota
+	ActionOrderUp                // Accept turned card as trump
+	ActionCallTrump              // Name a trump suit
+	ActionGoAlone                // Play without partner
+	ActionDefendAlone            // Defend without partner (optional rule)
+	ActionDiscard                // Dealer discards a card
+	ActionPlayCard               // Play a card to the trick
 )
 
 func (a ActionType) String() string {
@@ -104,6 +107,15 @@ type CallTrumpAction struct {
 func (a CallTrumpAction) Type() ActionType { return ActionCallTrump }
 func (a CallTrumpAction) Player() int      { return a.PlayerIdx }
 
+// DefendAloneAction represents a defender choosing to defend alone (optional rule).
+// Declared during the pre-lead PhaseDefendAlone window, before the opening lead.
+type DefendAloneAction struct {
+	PlayerIdx int
+}
+
+func (a DefendAloneAction) Type() ActionType { return ActionDefendAlone }
+func (a DefendAloneAction) Player() int      { return a.PlayerIdx }
+
 // DiscardAction represents the dealer discarding a card
 type DiscardAction struct {
 	PlayerIdx int
@@ -132,12 +144,13 @@ type BidDecision struct {
 
 // RoundResult contains the outcome of a completed round
 type RoundResult struct {
-	Makers       int  // Team that called trump (0 or 1)
-	MakerTricks  int  // Tricks won by making team
-	WasAlone     bool // Whether it was a loner attempt
-	WasEuchred   bool // Whether makers were euchred
-	MakerPoints  int  // Points scored by makers
-	DefendPoints int  // Points scored by defenders (if euchred)
+	Makers           int  // Team that called trump (0 or 1)
+	MakerTricks      int  // Tricks won by making team
+	WasAlone         bool // Whether it was a loner attempt
+	WasEuchred       bool // Whether makers were euchred
+	MakerPoints      int  // Points scored by makers
+	DefendPoints     int  // Points scored by defenders (if euchred)
+	WasDefendedAlone bool // Whether a defender declared defend-alone
 }
 
 // ScoreUpdate represents point changes after a round

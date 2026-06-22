@@ -2,6 +2,20 @@ package engine
 
 import "testing"
 
+// firstNonPassAction returns the first non-pass action, or the first action if
+// all are passes. Used to drive a round to a real (non-misdeal) completion.
+func firstNonPassAction(actions []Action) Action {
+	for _, a := range actions {
+		if a.Type() != ActionPass {
+			return a
+		}
+	}
+	if len(actions) > 0 {
+		return actions[0]
+	}
+	return nil
+}
+
 func TestNewGame(t *testing.T) {
 	config := DefaultGameConfig()
 	game := NewGame(config)
@@ -108,16 +122,14 @@ func TestGameDealerRotation(t *testing.T) {
 	// Start and complete a round
 	game.StartRound()
 
-	// Play through quickly
+	// Play through quickly, preferring a non-pass action so trump gets called
+	// (otherwise an all-pass would be a misdeal and the dealer would not rotate)
 	for !game.NeedsNewRound() && !game.IsOver() {
 		currentPlayer := game.CurrentPlayer()
 		if currentPlayer < 0 {
 			break
 		}
-		actions := game.LegalActions()
-		if len(actions) > 0 {
-			game.ApplyAction(actions[0])
-		}
+		game.ApplyAction(firstNonPassAction(game.LegalActions()))
 	}
 
 	// Dealer should rotate
@@ -151,17 +163,14 @@ func TestGameRoundHistory(t *testing.T) {
 		t.Errorf("History should be empty initially, got %d entries", len(history))
 	}
 
-	// Start and complete a round
+	// Start and complete a round (call trump so it is not a misdeal)
 	game.StartRound()
 	for !game.NeedsNewRound() && !game.IsOver() {
 		currentPlayer := game.CurrentPlayer()
 		if currentPlayer < 0 {
 			break
 		}
-		actions := game.LegalActions()
-		if len(actions) > 0 {
-			game.ApplyAction(actions[0])
-		}
+		game.ApplyAction(firstNonPassAction(game.LegalActions()))
 	}
 
 	history = game.RoundHistory()

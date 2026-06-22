@@ -7,6 +7,12 @@ import (
 // Deck represents a deck of cards
 type Deck struct {
 	cards []Card
+	rng   *rand.Rand // Optional deterministic RNG; nil means use the package-global source
+}
+
+// Seed sets a deterministic RNG for shuffling. Used for reproducible tests.
+func (d *Deck) Seed(seed int64) {
+	d.rng = rand.New(rand.NewSource(seed))
 }
 
 // NewStandardDeck creates a standard 24-card Euchre deck (9, 10, J, Q, K, A of each suit)
@@ -63,9 +69,14 @@ func (d *Deck) Size() int {
 
 // Shuffle randomizes the order of cards in the deck
 func (d *Deck) Shuffle() {
-	rand.Shuffle(len(d.cards), func(i, j int) {
+	swap := func(i, j int) {
 		d.cards[i], d.cards[j] = d.cards[j], d.cards[i]
-	})
+	}
+	if d.rng != nil {
+		d.rng.Shuffle(len(d.cards), swap)
+		return
+	}
+	rand.Shuffle(len(d.cards), swap)
 }
 
 // Draw removes and returns the top card from the deck
