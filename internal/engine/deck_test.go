@@ -126,6 +126,26 @@ func TestDeckShuffle(t *testing.T) {
 	}
 }
 
+func TestDeckSeedDeterministic(t *testing.T) {
+	deck1 := NewStandardDeck()
+	deck2 := NewStandardDeck()
+
+	deck1.Seed(42)
+	deck2.Seed(42)
+
+	deck1.Shuffle()
+	deck2.Shuffle()
+
+	cards1 := deck1.Cards()
+	cards2 := deck2.Cards()
+
+	for i := range cards1 {
+		if cards1[i] != cards2[i] {
+			t.Fatalf("Decks seeded identically should shuffle identically, differ at %d", i)
+		}
+	}
+}
+
 func TestNewHand(t *testing.T) {
 	hand := NewHand()
 	if hand.Size() != 0 {
@@ -248,7 +268,7 @@ func TestHandTrumps(t *testing.T) {
 func TestHandHighestTrump(t *testing.T) {
 	hand := NewHandWith([]Card{
 		{Hearts, Ace},
-		{Hearts, Jack}, // Right bower
+		{Hearts, Jack},   // Right bower
 		{Diamonds, Jack}, // Left bower
 		{Spades, King},
 	})

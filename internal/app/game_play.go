@@ -9,6 +9,8 @@ import (
 	"github.com/bran/euchre/internal/engine"
 	"github.com/bran/euchre/internal/ui/components"
 	"github.com/bran/euchre/internal/ui/theme"
+	"github.com/bran/euchre/internal/variants"
+	"github.com/bran/euchre/internal/variants/standard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -67,9 +69,35 @@ type GamePlay struct {
 	suitSelector *components.SuitSelector
 }
 
+// rulesFromVariant maps a selected variant's options to the engine's Rules struct.
+func rulesFromVariant(v variants.Variant) engine.Rules {
+	rules := engine.Rules{
+		StickTheDealer: v.HasStickTheDealer(),
+		AllowMisdeal:   v.AllowMisdeal(),
+	}
+	// defend_alone is an optional, per-variant boolean rule.
+	if bv, ok := v.(interface {
+		GetBoolOption(string, bool) bool
+	}); ok {
+		rules.AllowDefendAlone = bv.GetBoolOption("defend_alone", false)
+	}
+	return rules
+}
+
 // NewGamePlay creates a new game play screen
 func NewGamePlay() *GamePlay {
 	config := engine.DefaultGameConfig()
+
+	// Map the selected variant's options onto the engine's plain Rules struct.
+	// The engine cannot import variants (that would be a circular import), so the
+	// app layer does this translation. Currently we use the standard variant; when
+	// variant selection is wired into GameSetup, resolve the chosen variant here:
+	//
+	//   v, _ := variants.Get(selectedVariantName)
+	//   config.Rules = rulesFromVariant(v)
+	//
+	config.Rules = rulesFromVariant(standard.New())
+
 	game := engine.NewGame(config)
 
 	gp := &GamePlay{
@@ -203,6 +231,14 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		g.previousScores[1] = scores[1]
 		if g.scoreDelta[0] != 0 || g.scoreDelta[1] != 0 {
 			g.scoreAnimFrames = scoreAnimTotal
+		}
+
+		// A misdeal (round-2 throw-in) appends nothing to history and changes no
+		// scores, so the history-based result below would show a stale/zero
+		// result. Handle it explicitly with a clear re-deal message.
+		if g.game.IsMisdeal() {
+			g.message = "Throw-in — everyone passed. Re-dealing…"
+			return g, nil
 		}
 
 		// Get round result details
