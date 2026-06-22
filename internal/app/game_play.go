@@ -181,7 +181,9 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return g, g.processAITurns()
 
 	case humanTurnMsg:
-		// It's the human's turn - update the display
+		// It's the human's turn - update the display and pre-select a legal card
+		// so pressing Enter always plays a valid card by default.
+		g.selectedCard = g.firstLegalCardIndex()
 		g.updateTableView()
 		return g, nil
 
@@ -671,7 +673,10 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 				Card:      card,
 			}
 			if err := g.game.ApplyAction(action); err != nil {
-				return g.showTempMessage(err.Error())
+				// Illegal play (e.g. must follow suit): snap selection to a legal
+				// card and point the player at the highlighted options.
+				g.selectedCard = g.firstLegalCardIndex()
+				return g.showTempMessage("Must follow suit — playable cards are highlighted in green.")
 			}
 			g.selectedCard = 0
 
@@ -986,6 +991,32 @@ func (g *GamePlay) selectBestTrump(hand []engine.Card, excludeSuit engine.Suit) 
 	}
 
 	return bestSuit
+}
+
+// firstLegalCardIndex returns the hand index of the first legal card the human
+// can play in the current trick. It returns 0 when not in the human's play turn
+// or when legality can't be determined (the caller's default selection).
+func (g *GamePlay) firstLegalCardIndex() int {
+	if g.game.Phase() != engine.PhasePlay || g.game.CurrentPlayer() != g.humanPlayer {
+		return 0
+	}
+	round := g.game.Round()
+	if round == nil || round.Trick() == nil {
+		return 0
+	}
+	hand := g.game.Hand(g.humanPlayer)
+	legal := engine.LegalPlays(engine.NewHandWith(hand), round.Trick())
+	if len(legal) == 0 {
+		return 0
+	}
+	for i, c := range hand {
+		for _, lc := range legal {
+			if c.Suit == lc.Suit && c.Rank == lc.Rank {
+				return i
+			}
+		}
+	}
+	return 0
 }
 
 // showTempMessage shows a temporary message that reverts after a delay
