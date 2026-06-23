@@ -1262,8 +1262,11 @@ func (g *GamePlay) View() string {
 	centeredHand := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, handStr)
 	centerContent := tableStr + centeredHand
 
-	// Compose the main area: full layout has side HUD panels; compact layout
-	// drops them for a single scoreboard line above the table.
+	// Compose the main area. The side cards are pure team scoreboards; global
+	// game state (round, trump, contract) goes in a banner above the table and
+	// the running play log goes in a ticker below it, so neither reads as
+	// belonging to one team. Compact layout folds the global state into a single
+	// scoreboard line instead of the banner/cards.
 	var mainArea string
 	if showPanels {
 		centerHeight := lipgloss.Height(centerContent)
@@ -1274,9 +1277,23 @@ func (g *GamePlay) View() string {
 		scoreBar := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, g.renderScoreBar())
 		mainArea = lipgloss.JoinVertical(lipgloss.Center, scoreBar, centerContent)
 	}
+	mainWidth := lipgloss.Width(mainArea)
 
-	// Build final layout
-	innerContent := mainArea + "\n" +
+	// Assemble vertical sections: [banner] · main area · [recent ticker].
+	var sections []string
+	if showPanels {
+		if banner := g.renderContractBanner(mainWidth); banner != "" {
+			sections = append(sections, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, banner), "")
+		}
+	}
+	sections = append(sections, mainArea)
+	if ticker := g.renderRecentTicker(mainWidth); ticker != "" {
+		sections = append(sections, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, ticker))
+	}
+	block := lipgloss.JoinVertical(lipgloss.Center, sections...)
+
+	// Build final layout (phase + help kept as their own trailing lines).
+	innerContent := block + "\n" +
 		theme.Current.Accent.Render(phaseStr) + "\n" +
 		theme.Current.Help.Render(helpStr)
 
@@ -1518,9 +1535,9 @@ func (g *GamePlay) getHelpText() string {
 	}
 }
 
-// renderLeftPanel renders your team's HUD as a contained, top-formatted card
-// (header bar, score, tricks, round, recent events), vertically centered beside
-// the table.
+// renderLeftPanel renders your team's scoreboard card (score + tricks). Global
+// state (round, trump, contract, log) lives in the banner/ticker, not here, so
+// the card reads purely as your team's standing.
 func (g *GamePlay) renderLeftPanel(height int) string {
 	scores := g.game.Scores()
 	var yourTricks int
@@ -1540,12 +1557,6 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 		"",
 		panelCenter(theme.Current.Muted, "Tricks"),
 		panelTrickDots(yourTricks, theme.ColGreen),
-		panelDivider(),
-		panelCenter(theme.Current.Muted, fmt.Sprintf("Round %d", g.tableView.RoundNumber)),
-	}
-	if ev := g.eventLogLines(panelInnerWidth); len(ev) > 0 {
-		body = append(body, panelDivider())
-		body = append(body, ev...)
 	}
 
 	return panelBox("YOU", theme.ColGreen, body, height)
@@ -1590,11 +1601,6 @@ func panelCenter(style lipgloss.Style, s string) string {
 	return style.Width(panelInnerWidth).Align(lipgloss.Center).Render(s)
 }
 
-// panelDivider returns a full-width muted rule between panel sections.
-func panelDivider() string {
-	return theme.Current.Muted.Render(strings.Repeat("─", panelInnerWidth))
-}
-
 // panelTrickDots renders 5 trick pips (filled in the team accent, empty muted),
 // centered to the panel width.
 func panelTrickDots(n int, accent lipgloss.TerminalColor) string {
@@ -1611,28 +1617,8 @@ func panelTrickDots(n int, accent lipgloss.TerminalColor) string {
 	return lipgloss.PlaceHorizontal(panelInnerWidth, lipgloss.Center, s)
 }
 
-// eventLogLines renders the recent-events log for the side panel, wrapping each
-// event to the panel's inner width. Returns nil when there are no events.
-func (g *GamePlay) eventLogLines(width int) []string {
-	if len(g.eventLog) == 0 {
-		return nil
-	}
-	// Show only the most recent few so the panel can't overflow.
-	const showN = 3
-	events := g.eventLog
-	if len(events) > showN {
-		events = events[len(events)-showN:]
-	}
-	evStyle := theme.Current.Muted.Width(width).Align(lipgloss.Center)
-	out := []string{panelCenter(theme.Current.Muted.Bold(true), "Recent")}
-	for _, e := range events {
-		out = append(out, evStyle.Render(e))
-	}
-	return out
-}
-
-// renderRightPanel renders the opponents' HUD as a contained, top-formatted
-// card (header bar, score, tricks, trump, contract), vertically centered.
+// renderRightPanel renders the opponents' scoreboard card (score + tricks),
+// mirroring renderLeftPanel. Global state lives in the banner/ticker.
 func (g *GamePlay) renderRightPanel(height int) string {
 	scores := g.game.Scores()
 	var oppTricks int
@@ -1654,21 +1640,12 @@ func (g *GamePlay) renderRightPanel(height int) string {
 		panelTrickDots(oppTricks, theme.ColRed),
 	}
 
-	// Trump + contract appear once trump is set.
-	if g.tableView.Trump != engine.NoSuit {
-		body = append(body,
-			panelDivider(),
-			panelCenter(theme.Current.Muted, "Trump"),
-			g.trumpChip(),
-		)
-		body = append(body, g.contractLines()...)
-	}
-
 	return panelBox("OPP", theme.ColRed, body, height)
 }
 
-// trumpChip renders a full-width filled trump bar matching the suit color.
-func (g *GamePlay) trumpChip() string {
+// trumpBadge renders a small filled trump chip (suit symbol + name) colored to
+// match the suit, for inline use in the contract banner.
+func (g *GamePlay) trumpBadge() string {
 	bg := lipgloss.Color("#000000") // spades/clubs
 	if g.tableView.Trump == engine.Hearts || g.tableView.Trump == engine.Diamonds {
 		bg = lipgloss.Color("#E74C3C")
@@ -1677,28 +1654,56 @@ func (g *GamePlay) trumpChip() string {
 		Bold(true).
 		Background(bg).
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Width(panelInnerWidth).
-		Align(lipgloss.Center).
+		Padding(0, 1).
 		Render(g.tableView.Trump.Symbol() + " " + g.tableView.Trump.String())
 }
 
-// contractLines renders the current contract (who called trump, and "alone")
-// for the side panel. Returns nil before trump is set.
-func (g *GamePlay) contractLines() []string {
-	maker := g.tableView.Maker
-	if maker < 0 || maker >= len(g.tableView.PlayerNames) {
-		return nil
+// renderContractBanner builds the centered global banner above the table:
+// round, trump, and who holds the contract. None of this belongs to one team,
+// so it sits between the two scoreboards rather than inside either. Returns ""
+// during dealing (before there's anything to show).
+func (g *GamePlay) renderContractBanner(maxWidth int) string {
+	if g.isDealing {
+		return ""
 	}
-	makerName := g.tableView.PlayerNames[maker]
-	out := []string{
-		panelCenter(theme.Current.Muted, "called by"),
-		panelCenter(theme.Current.Body, makerName),
+	sep := theme.Current.Muted.Render("   ·   ")
+	parts := []string{theme.Current.Muted.Render(fmt.Sprintf("Round %d", g.tableView.RoundNumber))}
+
+	if g.tableView.Trump != engine.NoSuit {
+		parts = append(parts, theme.Current.Muted.Render("Trump ")+g.trumpBadge())
+		if m := g.tableView.Maker; m >= 0 && m < len(g.tableView.PlayerNames) {
+			tag := "called by " + g.tableView.PlayerNames[m]
+			if g.tableView.MakerAlone {
+				tag += " (alone)"
+			}
+			parts = append(parts, theme.Current.Muted.Render(tag))
+		}
+	} else {
+		parts = append(parts, theme.Current.Muted.Italic(true).Render("bidding…"))
 	}
-	if g.tableView.MakerAlone {
-		aloneStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E67E22")).Bold(true)
-		out = append(out, panelCenter(aloneStyle, "ALONE"))
+
+	return lipgloss.NewStyle().MaxWidth(maxWidth).Render(strings.Join(parts, sep))
+}
+
+// renderRecentTicker builds the centered global play log shown below the table:
+// the last few events as a single horizontal line. Truncated to maxWidth so it
+// can never overflow. Returns "" when there are no events yet.
+func (g *GamePlay) renderRecentTicker(maxWidth int) string {
+	if len(g.eventLog) == 0 {
+		return ""
 	}
-	return out
+	const showN = 3
+	events := g.eventLog
+	if len(events) > showN {
+		events = events[len(events)-showN:]
+	}
+	styled := make([]string, len(events))
+	for i, e := range events {
+		styled[i] = theme.Current.Muted.Render(e)
+	}
+	label := theme.Current.Muted.Bold(true).Render("Recent  ")
+	line := label + strings.Join(styled, theme.Current.Muted.Render("  ·  "))
+	return lipgloss.NewStyle().MaxWidth(maxWidth).Render(line)
 }
 
 // renderScoreBar builds the single-line scoreboard shown above the table in the
