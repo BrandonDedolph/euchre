@@ -22,10 +22,13 @@ const (
 
 // CardView represents a visual card component
 type CardView struct {
-	Card     engine.Card
-	Style    CardStyle
-	FaceUp   bool
-	Compact  bool
+	Card    engine.Card
+	Style   CardStyle
+	FaceUp  bool
+	Compact bool
+	// Trump, when set (not NoSuit), lets the card flag itself as the left bower
+	// — the off-suit jack that actually plays as trump — with a small trump pip.
+	Trump engine.Suit
 }
 
 // NewCardView creates a new card view
@@ -85,8 +88,15 @@ func (c *CardView) renderFull() string {
 		Background(interiorBg).
 		Foreground(contentColor)
 
-	// Build each interior line as a complete styled unit (5 chars wide)
-	interior1 := interiorStyle.Render(rankPad + "   ")
+	// Build each interior line as a complete styled unit (5 chars wide).
+	// For the left bower (the off-suit jack that plays as trump), tuck a small
+	// trump pip into the top-right corner so a learner can see it counts as
+	// trump despite its printed suit.
+	topLine := rankPad + "   "
+	if c.Trump != engine.NoSuit && c.Card.IsLeftBower(c.Trump) {
+		topLine = rankPad + "  " + c.Trump.Symbol()
+	}
+	interior1 := interiorStyle.Render(topLine)
 	interior2 := interiorStyle.Render("  " + suit + "  ")
 	interior3 := interiorStyle.Render("   " + rankPad)
 
@@ -170,13 +180,16 @@ func (c *CardView) getStyles() (contentStyle, borderStyle, bgStyle lipgloss.Styl
 }
 
 // RenderHand renders a hand of cards horizontally
-// Colors:
+// Colors / cues:
 //   - Blue dashed border: Currently selected card (press Enter to play)
-//   - Green border: Legal cards you can play
+//   - Green border + a "▾" marker above: Legal cards you can play (the marker
+//     is a colorblind-safe secondary cue so green isn't the only signal)
 //   - Dimmed/gray: Cards you cannot play right now (must follow suit)
 //   - Normal (red/black): When it's not your turn, all cards shown normally
-// Set selectedIdx to -1 to disable selection highlighting
-func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Card) string {
+//   - A small trump pip on the left bower when trump is set
+// Set selectedIdx to -1 to disable selection highlighting; pass trump as
+// engine.NoSuit to skip the left-bower flag.
+func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Card, trump engine.Suit) string {
 	if len(cards) == 0 {
 		return ""
 	}
@@ -192,10 +205,13 @@ func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Car
 
 	// Render each card
 	cardViews := make([]*CardView, len(cards))
+	playableFlags := make([]bool, len(cards))
 	for i, card := range cards {
 		cv := NewCardView(card)
+		cv.Trump = trump
 		isSelected := selectedIdx >= 0 && i == selectedIdx
 		isPlayable := hasPlayableInfo && playable[card.String()]
+		playableFlags[i] = isPlayable
 
 		if isSelected && isPlayable {
 			cv.Style = CardStyleSelectedPlayable
@@ -209,23 +225,32 @@ func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Car
 		cardViews[i] = cv
 	}
 
-	// Render cards with raised effect for selected card
+	// Render cards with raised effect for selected card, plus a "playable"
+	// marker row on top so legal cards are identifiable without relying on color.
 	renderedCards := make([]string, len(cardViews))
 	cardWidth := 7 // width of a card "┌─────┐"
 	emptyLine := strings.Repeat(" ", cardWidth)
+	markStyle := theme.Current.Success.Bold(true)
 
 	for i, cv := range cardViews {
 		card := cv.Render()
 		isSelected := selectedIdx >= 0 && i == selectedIdx
 
+		marker := emptyLine
+		if playableFlags[i] {
+			marker = markStyle.Render(lipgloss.PlaceHorizontal(cardWidth, lipgloss.Center, "▾"))
+		}
+
+		var body string
 		if isSelected {
 			// Selected card: no top padding (appears raised)
 			// Add bottom padding to maintain alignment
-			renderedCards[i] = card + "\n" + emptyLine
+			body = card + "\n" + emptyLine
 		} else {
 			// Non-selected: add top padding (appears lower)
-			renderedCards[i] = emptyLine + "\n" + card
+			body = emptyLine + "\n" + card
 		}
+		renderedCards[i] = marker + "\n" + body
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, renderedCards...)

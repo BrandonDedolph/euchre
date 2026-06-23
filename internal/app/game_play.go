@@ -1233,12 +1233,12 @@ func (g *GamePlay) View() string {
 			selectedIdx = g.selectedCard
 		}
 
-		handCards := components.RenderHand(hand, selectedIdx, legalPlays)
+		handCards := components.RenderHand(hand, selectedIdx, legalPlays, g.tableView.Trump)
 		handStr = lipgloss.JoinVertical(lipgloss.Center, playerHeader, handCards)
 	}
 
-	// Fixed height for hand area (1 name + 5 cards + 1 raised = 7)
-	handStr = lipgloss.NewStyle().Height(7).Render(handStr)
+	// Fixed height for hand area (1 name + 1 playable marker + 5 cards + 1 raised = 8)
+	handStr = lipgloss.NewStyle().Height(8).Render(handStr)
 
 	// Build status bar with phase message (trump info now in side panel)
 	phaseStr := g.getPhaseMessage()
