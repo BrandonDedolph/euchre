@@ -1195,7 +1195,7 @@ func (g *GamePlay) View() string {
 		}
 
 		// Build player header with name, inline tricks, and dealer badge
-		tricksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+		tricksStyle := theme.Current.Muted
 		tricksStr := tricksStyle.Render(fmt.Sprintf("(%d)", playerTricks))
 		playerName := theme.Current.Primary.Render("You") + " " + tricksStr
 		if g.game.Dealer() == g.humanPlayer {
