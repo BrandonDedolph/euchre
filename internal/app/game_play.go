@@ -46,6 +46,7 @@ type GamePlay struct {
 	humanPlayer        int
 	selectedCard       int
 	message            string
+	eventLog           []string // recent player-facing events (most recent last)
 	tableView          *components.TableView
 	width              int
 	height             int
@@ -175,6 +176,7 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case aiBidMsg:
 		// AI made a bid, use longer delay so user can follow
 		g.message = msg.message
+		g.pushEvent(msg.message)
 		g.updateTableView()
 		return g, tea.Tick(aiBidDelay, func(t time.Time) tea.Msg {
 			return aiContinueMsg{}
@@ -237,6 +239,7 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			trickMsg += " with trump"
 		}
 		g.message = trickMsg
+		g.pushEvent(trickMsg)
 		return g, nil
 
 	case roundCompleteMsg:
@@ -473,6 +476,7 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			// Start next round with shuffle animation
 			g.game.StartRound()
+			g.eventLog = nil // fresh log for the new deal
 			g.isShuffling = true
 			g.shuffleStep = 0
 			g.isDealing = false
@@ -619,6 +623,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = "You ordered it up!"
+			g.pushEvent(g.message)
 			g.updateTableView()
 		}
 
@@ -637,6 +642,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = fmt.Sprintf("You called %s!", suit)
+			g.pushEvent(g.message)
 			g.suitSelector = nil // Reset for next time
 			g.updateTableView()
 		}
@@ -741,6 +747,7 @@ func (g *GamePlay) handlePass() (tea.Model, tea.Cmd) {
 		g.message = err.Error()
 	} else {
 		g.message = "You passed"
+		g.pushEvent(g.message)
 		g.updateTableView()
 	}
 
@@ -767,6 +774,7 @@ func (g *GamePlay) handleAlone() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = "Going alone!"
+			g.pushEvent("You're going alone!")
 			g.updateTableView()
 		}
 	}
@@ -799,6 +807,7 @@ func (g *GamePlay) handleDefendAlone(declare bool) (tea.Model, tea.Cmd) {
 		} else {
 			g.message = "You decline to defend alone"
 		}
+		g.pushEvent(g.message)
 		g.updateTableView()
 	}
 
@@ -833,6 +842,7 @@ func (g *GamePlay) handleCallSuit(suit engine.Suit, alone bool) (tea.Model, tea.
 	}
 
 	g.message = fmt.Sprintf("You called %s!", suit)
+	g.pushEvent(g.message)
 	g.suitSelector = nil // Reset suit selector
 	g.updateTableView()
 	return g, g.processAITurns()
@@ -906,12 +916,14 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 					return aiErrorMsg{err: err, player: current, action: "defend-alone"}
 				}
 				g.message = fmt.Sprintf("%s defends alone!", playerName)
+				g.pushEvent(g.message)
 			} else {
 				action := engine.PassAction{PlayerIdx: current}
 				if err := g.game.ApplyAction(action); err != nil {
 					return aiErrorMsg{err: err, player: current, action: "defend-alone-pass"}
 				}
 				g.message = fmt.Sprintf("%s declines to defend alone", playerName)
+				g.pushEvent(g.message)
 			}
 
 		case engine.PhasePlay:
@@ -1026,6 +1038,23 @@ func (g *GamePlay) firstLegalCardIndex() int {
 		}
 	}
 	return 0
+}
+
+// pushEvent appends a player-facing event to the recent-events log shown in the
+// side panel, keeping only the most recent few. Empty/duplicate-of-last events
+// are ignored to avoid noise.
+func (g *GamePlay) pushEvent(msg string) {
+	const maxEvents = 4
+	if msg == "" {
+		return
+	}
+	if n := len(g.eventLog); n > 0 && g.eventLog[n-1] == msg {
+		return
+	}
+	g.eventLog = append(g.eventLog, msg)
+	if len(g.eventLog) > maxEvents {
+		g.eventLog = g.eventLog[len(g.eventLog)-maxEvents:]
+	}
 }
 
 // showTempMessage shows a temporary message that reverts after a delay
@@ -1517,18 +1546,48 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 		mutedStyle.Render(fmt.Sprintf("Round %d", g.tableView.RoundNumber)),
 	}
 
+	// Recent-events log fills the otherwise-empty lower panel.
+	lines = append(lines, g.eventLogLines(panelInnerWidth)...)
+
 	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
 
 	// Style with fixed width and height, right border
 	style := lipgloss.NewStyle().
-		Width(12).
+		Width(panelWidth).
 		Height(height).
 		Align(lipgloss.Center).
 		BorderRight(true).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#3498DB"))
+		BorderForeground(theme.ColBlue)
 
 	return style.Render(content)
+}
+
+// panelWidth/panelInnerWidth size the side panels. Inner width leaves room for
+// the 1-col border so wrapped text doesn't collide with it.
+const (
+	panelWidth      = 12
+	panelInnerWidth = panelWidth - 2
+)
+
+// eventLogLines renders the recent-events log for the side panel, wrapping each
+// event to the panel's inner width. Returns nil when there are no events.
+func (g *GamePlay) eventLogLines(width int) []string {
+	if len(g.eventLog) == 0 {
+		return nil
+	}
+	// Show only the most recent few so the panel can't overflow.
+	const showN = 3
+	events := g.eventLog
+	if len(events) > showN {
+		events = events[len(events)-showN:]
+	}
+	evStyle := theme.Current.Muted.Width(width).Align(lipgloss.Center)
+	out := []string{"", theme.Current.Muted.Render("Recent")}
+	for _, e := range events {
+		out = append(out, evStyle.Render(e))
+	}
+	return out
 }
 
 // renderRightPanel renders the right side panel with opponent/trump info
@@ -1595,18 +1654,42 @@ func (g *GamePlay) renderRightPanel(height int) string {
 		trumpStr,
 	}
 
+	// Contract: who called trump and whether they're alone.
+	lines = append(lines, g.contractLines()...)
+
 	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
 
 	// Style with fixed width and height, left border
 	style := lipgloss.NewStyle().
-		Width(12).
+		Width(panelWidth).
 		Height(height).
 		Align(lipgloss.Center).
 		BorderLeft(true).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#3498DB"))
+		BorderForeground(theme.ColBlue)
 
 	return style.Render(content)
+}
+
+// contractLines renders the current contract (who called trump, and "alone")
+// for the side panel. Returns nil before trump is set.
+func (g *GamePlay) contractLines() []string {
+	maker := g.tableView.Maker
+	if maker < 0 || maker >= len(g.tableView.PlayerNames) {
+		return nil
+	}
+	makerName := g.tableView.PlayerNames[maker]
+	nameStyle := theme.Current.Muted.Width(panelInnerWidth).Align(lipgloss.Center)
+	out := []string{"", nameStyle.Render("called by"), nameStyle.Render(makerName)}
+	if g.tableView.MakerAlone {
+		aloneStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E67E22")).
+			Bold(true).
+			Width(panelInnerWidth).
+			Align(lipgloss.Center)
+		out = append(out, aloneStyle.Render("ALONE"))
+	}
+	return out
 }
 
 // Messages for async operations
