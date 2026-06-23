@@ -23,7 +23,11 @@ func NewMainMenu() *MainMenu {
 		},
 		{
 			Label:       "Learn to Play",
-			Description: "Interactive tutorials to learn Euchre",
+			Description: "Guided lessons on the rules and strategy",
+		},
+		{
+			Label:       "Interactive Tutorial",
+			Description: "Play a real, randomly-dealt hand with a coach guiding each move",
 		},
 		{
 			Label:       "Quick Reference",
@@ -79,9 +83,11 @@ func (m *MainMenu) handleSelect() (tea.Model, tea.Cmd) {
 		return m, Navigate(ScreenGameSetup)
 	case 1: // Learn to Play
 		return m, Navigate(ScreenLearningJourney)
-	case 2: // Quick Reference
+	case 2: // Interactive Tutorial — a real random hand with coaching
+		return m, NavigateWithData(ScreenGamePlay, GameSettings{Variant: "Standard", Tutorial: true})
+	case 3: // Quick Reference
 		return m, Navigate(ScreenQuickReference)
-	case 3: // Quit
+	case 4: // Quit
 		return m, Quit()
 	}
 

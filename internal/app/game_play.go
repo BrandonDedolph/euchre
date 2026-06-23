@@ -45,6 +45,8 @@ type GamePlay struct {
 	game               *engine.Game
 	aiPlayers          []ai.Player
 	humanPlayer        int
+	tutorial           bool      // interactive-tutorial mode: show per-move coaching
+	coach              ai.Player // strong AI used only to suggest the human's best move
 	selectedCard       int
 	message            string
 	eventLog           []string // recent player-facing events (most recent last)
@@ -102,19 +104,20 @@ func NewGamePlay() *GamePlay {
 	// Map the standard variant's default options onto the engine's plain Rules
 	// struct. The engine cannot import variants (that would be a circular
 	// import), so the app layer does this translation.
-	return newGamePlay(rulesFromVariant(standard.New()))
+	return newGamePlay(rulesFromVariant(standard.New()), false)
 }
 
 // NewGamePlayWithSettings creates a new game play screen using the rule toggles
-// chosen on the setup screen.
+// chosen on the setup screen. When s.Tutorial is set the interactive coach is
+// enabled (hands are still randomly dealt — only the per-move tips are added).
 func NewGamePlayWithSettings(s GameSettings) *GamePlay {
-	return newGamePlay(rulesFromVariant(variantFromSettings(s)))
+	return newGamePlay(rulesFromVariant(variantFromSettings(s)), s.Tutorial)
 }
 
 // newGamePlay is the shared constructor body. It builds the game from the given
 // engine rules and wires up the human/AI players, animation state, and starts
 // the first round.
-func newGamePlay(rules engine.Rules) *GamePlay {
+func newGamePlay(rules engine.Rules, tutorial bool) *GamePlay {
 	config := engine.DefaultGameConfig()
 	config.Rules = rules
 
@@ -124,12 +127,19 @@ func newGamePlay(rules engine.Rules) *GamePlay {
 		game:         game,
 		humanPlayer:  0, // Player 0 is the human
 		aiPlayers:    rule_based.CreateAIPlayers(0, ai.DifficultyMedium),
+		tutorial:     tutorial,
 		selectedCard: 0,
 		tableView:    components.NewTableView(),
 		isShuffling:  true, // Start with shuffle animation
 		shuffleStep:  0,
 		isDealing:    false,
 		dealStep:     0,
+	}
+
+	// In tutorial mode a strong AI sitting in the human's seat supplies the
+	// suggested best move for each decision.
+	if tutorial {
+		gp.coach = rule_based.New("Coach", gp.humanPlayer, ai.DifficultyHard)
 	}
 
 	// Start the first round (cards are dealt in engine, animation is visual only)
@@ -1306,10 +1316,19 @@ func (g *GamePlay) View() string {
 	}
 	block := lipgloss.JoinVertical(lipgloss.Center, sections...)
 
-	// Build final layout (phase + help kept as their own trailing lines).
-	innerContent := block + "\n" +
-		theme.Current.Accent.Render(phaseStr) + "\n" +
-		theme.Current.Help.Render(helpStr)
+	// Build final layout (phase + optional coach tip + help as trailing lines).
+	trailing := []string{block, theme.Current.Accent.Render(phaseStr)}
+	if tip := g.coachTip(); tip != "" {
+		wrapW := mainWidth
+		if wrapW > 78 {
+			wrapW = 78
+		}
+		coachStyle := lipgloss.NewStyle().Foreground(theme.ColGold).Italic(true).
+			Width(wrapW).Align(lipgloss.Center)
+		trailing = append(trailing, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, coachStyle.Render("💡 "+tip)))
+	}
+	trailing = append(trailing, theme.Current.Help.Render(helpStr))
+	innerContent := strings.Join(trailing, "\n")
 
 	// Add celebration overlay if active
 	if g.celebrationFrames > 0 {
