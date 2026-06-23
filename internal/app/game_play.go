@@ -1316,16 +1316,12 @@ func (g *GamePlay) View() string {
 	}
 	block := lipgloss.JoinVertical(lipgloss.Center, sections...)
 
-	// Build final layout (phase + optional coach tip + help as trailing lines).
+	// Build final layout (phase + optional coach box + help as trailing lines).
 	trailing := []string{block, theme.Current.Accent.Render(phaseStr)}
-	if tip := g.coachTip(); tip != "" {
-		wrapW := mainWidth
-		if wrapW > 78 {
-			wrapW = 78
+	if g.tutorial {
+		if box := g.renderCoachBox(74); box != "" {
+			trailing = append(trailing, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, box))
 		}
-		coachStyle := lipgloss.NewStyle().Foreground(theme.ColGold).Italic(true).
-			Width(wrapW).Align(lipgloss.Center)
-		trailing = append(trailing, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, coachStyle.Render("💡 "+tip)))
 	}
 	trailing = append(trailing, theme.Current.Help.Render(helpStr))
 	innerContent := strings.Join(trailing, "\n")
