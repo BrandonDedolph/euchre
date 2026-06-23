@@ -1518,75 +1518,98 @@ func (g *GamePlay) getHelpText() string {
 	}
 }
 
-// renderLeftPanel renders the left side panel with your team info
+// renderLeftPanel renders your team's HUD as a contained, top-formatted card
+// (header bar, score, tricks, round, recent events), vertically centered beside
+// the table.
 func (g *GamePlay) renderLeftPanel(height int) string {
 	scores := g.game.Scores()
 	var yourTricks int
-	round := g.game.Round()
-	if round != nil {
-		yourTricks = round.TricksWon(0) + round.TricksWon(2)
+	if r := g.game.Round(); r != nil {
+		yourTricks = r.TricksWon(0) + r.TricksWon(2)
 	}
 
-	// Trick dots
-	dots := ""
-	for i := 0; i < 5; i++ {
-		if i < yourTricks {
-			dots += "●"
-		} else {
-			dots += "○"
-		}
-	}
-
-	// Build panel content
-	headerStyle := theme.Current.TeamYou
-	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColGreen)
-	mutedStyle := theme.Current.Muted
-
-	// Score with animation
-	scoreStr := fmt.Sprintf("%d", scores[0])
+	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColGreen).Bold(true)
+	scoreStr := fmt.Sprintf("%d pts", scores[0])
 	if g.scoreAnimFrames > 0 && g.scoreDelta[0] > 0 {
-		scoreStr = fmt.Sprintf("%d(+%d)", scores[0], g.scoreDelta[0])
+		scoreStr = fmt.Sprintf("%d (+%d) pts", scores[0], g.scoreDelta[0])
 		scoreStyle = scoreStyle.Background(theme.ColGreen).Foreground(lipgloss.Color("#FFF"))
 	}
 
-	lines := []string{
-		headerStyle.Render("  YOU  "),
+	body := []string{
+		panelCenter(scoreStyle, scoreStr),
 		"",
-		scoreStyle.Render(scoreStr + " pts"),
-		"",
-		mutedStyle.Render("Tricks"),
-		dots,
-		"",
-		mutedStyle.Render(fmt.Sprintf("Round %d", g.tableView.RoundNumber)),
+		panelCenter(theme.Current.Muted, "Tricks"),
+		panelTrickDots(yourTricks, theme.ColGreen),
+		panelDivider(),
+		panelCenter(theme.Current.Muted, fmt.Sprintf("Round %d", g.tableView.RoundNumber)),
+	}
+	if ev := g.eventLogLines(panelInnerWidth); len(ev) > 0 {
+		body = append(body, panelDivider())
+		body = append(body, ev...)
 	}
 
-	// Recent-events log fills the otherwise-empty lower panel.
-	lines = append(lines, g.eventLogLines(panelInnerWidth)...)
-
-	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
-
-	// Style with fixed width and height, right border
-	style := lipgloss.NewStyle().
-		Width(panelWidth).
-		Height(height).
-		Align(lipgloss.Center).
-		BorderRight(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(theme.ColBlue)
-
-	return style.Render(content)
+	return panelBox("YOU", theme.ColGreen, body, height)
 }
 
-// Layout sizing. panelWidth/panelInnerWidth size the side panels (inner width
-// leaves room for the 1-col border). The min/full thresholds decide between the
-// too-small guard, the compact (panel-less) layout, and the full HUD layout.
+// Layout sizing. panelInnerWidth is the content width inside each side-panel box
+// (outer = 13 incl. the rounded border). The min/full thresholds decide between
+// the too-small guard, the compact (panel-less) layout, and the full HUD layout.
 const (
-	panelWidth         = 12
-	panelInnerWidth    = panelWidth - 2
+	panelInnerWidth    = 11 // content width inside a panel box (outer = 13 incl. border)
 	minPlayableWidth   = 64 // table (~61 wide) + screen-border margin
 	minPlayableHeight  = 20 // enough rows for the table core
-	fullLayoutMinWidth = 89 // table + both side panels + borders
+	fullLayoutMinWidth = 89 // table (61) + both panel boxes (13 each) + screen border
 )
+
+// panelBox wraps a panel's body in a rounded border with a colored title bar,
+// then centers it vertically in the given column height so it reads as a
+// self-contained card rather than a full-height divider.
+func panelBox(title string, accent lipgloss.TerminalColor, body []string, height int) string {
+	header := lipgloss.NewStyle().
+		Width(panelInnerWidth).
+		Align(lipgloss.Center).
+		Bold(true).
+		Background(accent).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Render(title)
+
+	inner := lipgloss.JoinVertical(lipgloss.Center, append([]string{header}, body...)...)
+	box := lipgloss.NewStyle().
+		Width(panelInnerWidth).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ColBlue).
+		Render(inner)
+
+	// Top-align both panels so their title bars line up; pad below to fill the
+	// column height beside the table.
+	return lipgloss.PlaceVertical(height, lipgloss.Top, box)
+}
+
+// panelCenter renders s centered to the panel inner width using the given style.
+func panelCenter(style lipgloss.Style, s string) string {
+	return style.Width(panelInnerWidth).Align(lipgloss.Center).Render(s)
+}
+
+// panelDivider returns a full-width muted rule between panel sections.
+func panelDivider() string {
+	return theme.Current.Muted.Render(strings.Repeat("─", panelInnerWidth))
+}
+
+// panelTrickDots renders 5 trick pips (filled in the team accent, empty muted),
+// centered to the panel width.
+func panelTrickDots(n int, accent lipgloss.TerminalColor) string {
+	filled := lipgloss.NewStyle().Foreground(accent)
+	empty := theme.Current.Muted
+	s := ""
+	for i := 0; i < 5; i++ {
+		if i < n {
+			s += filled.Render("●")
+		} else {
+			s += empty.Render("○")
+		}
+	}
+	return lipgloss.PlaceHorizontal(panelInnerWidth, lipgloss.Center, s)
+}
 
 // eventLogLines renders the recent-events log for the side panel, wrapping each
 // event to the panel's inner width. Returns nil when there are no events.
@@ -1601,92 +1624,62 @@ func (g *GamePlay) eventLogLines(width int) []string {
 		events = events[len(events)-showN:]
 	}
 	evStyle := theme.Current.Muted.Width(width).Align(lipgloss.Center)
-	out := []string{"", theme.Current.Muted.Render("Recent")}
+	out := []string{panelCenter(theme.Current.Muted.Bold(true), "Recent")}
 	for _, e := range events {
 		out = append(out, evStyle.Render(e))
 	}
 	return out
 }
 
-// renderRightPanel renders the right side panel with opponent/trump info
+// renderRightPanel renders the opponents' HUD as a contained, top-formatted
+// card (header bar, score, tricks, trump, contract), vertically centered.
 func (g *GamePlay) renderRightPanel(height int) string {
 	scores := g.game.Scores()
 	var oppTricks int
-	round := g.game.Round()
-	if round != nil {
-		oppTricks = round.TricksWon(1) + round.TricksWon(3)
+	if r := g.game.Round(); r != nil {
+		oppTricks = r.TricksWon(1) + r.TricksWon(3)
 	}
 
-	// Trick dots
-	dots := ""
-	for i := 0; i < 5; i++ {
-		if i < oppTricks {
-			dots += "●"
-		} else {
-			dots += "○"
-		}
-	}
-
-	// Build panel content
-	headerStyle := theme.Current.TeamOpp
-	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColRed)
-	mutedStyle := theme.Current.Muted
-
-	// Score with animation
-	scoreStr := fmt.Sprintf("%d", scores[1])
+	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColRed).Bold(true)
+	scoreStr := fmt.Sprintf("%d pts", scores[1])
 	if g.scoreAnimFrames > 0 && g.scoreDelta[1] > 0 {
-		scoreStr = fmt.Sprintf("%d(+%d)", scores[1], g.scoreDelta[1])
+		scoreStr = fmt.Sprintf("%d (+%d) pts", scores[1], g.scoreDelta[1])
 		scoreStyle = scoreStyle.Background(theme.ColRed).Foreground(lipgloss.Color("#FFF"))
 	}
 
-	// Trump display with filled background
-	trumpLabel := mutedStyle.Render("Trump")
-	trumpStr := ""
+	body := []string{
+		panelCenter(scoreStyle, scoreStr),
+		"",
+		panelCenter(theme.Current.Muted, "Tricks"),
+		panelTrickDots(oppTricks, theme.ColRed),
+	}
+
+	// Trump + contract appear once trump is set.
 	if g.tableView.Trump != engine.NoSuit {
-		// Use filled background matching card color
-		var bgColor, fgColor lipgloss.Color
-		if g.tableView.Trump == engine.Hearts || g.tableView.Trump == engine.Diamonds {
-			bgColor = lipgloss.Color("#E74C3C") // Red
-			fgColor = lipgloss.Color("#FFFFFF")
-		} else {
-			bgColor = lipgloss.Color("#000000") // Black
-			fgColor = lipgloss.Color("#FFFFFF")
-		}
-		trumpStyle := lipgloss.NewStyle().
-			Bold(true).
-			Background(bgColor).
-			Foreground(fgColor).
-			Padding(0, 1)
-		trumpStr = trumpStyle.Render(g.tableView.Trump.Symbol() + " " + g.tableView.Trump.String())
+		body = append(body,
+			panelDivider(),
+			panelCenter(theme.Current.Muted, "Trump"),
+			g.trumpChip(),
+		)
+		body = append(body, g.contractLines()...)
 	}
 
-	lines := []string{
-		headerStyle.Render("  OPP  "),
-		"",
-		scoreStyle.Render(scoreStr + " pts"),
-		"",
-		mutedStyle.Render("Tricks"),
-		dots,
-		"",
-		trumpLabel,
-		trumpStr,
+	return panelBox("OPP", theme.ColRed, body, height)
+}
+
+// trumpChip renders a full-width filled trump bar matching the suit color.
+func (g *GamePlay) trumpChip() string {
+	bg := lipgloss.Color("#000000") // spades/clubs
+	if g.tableView.Trump == engine.Hearts || g.tableView.Trump == engine.Diamonds {
+		bg = lipgloss.Color("#E74C3C")
 	}
-
-	// Contract: who called trump and whether they're alone.
-	lines = append(lines, g.contractLines()...)
-
-	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
-
-	// Style with fixed width and height, left border
-	style := lipgloss.NewStyle().
-		Width(panelWidth).
-		Height(height).
+	return lipgloss.NewStyle().
+		Bold(true).
+		Background(bg).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		Width(panelInnerWidth).
 		Align(lipgloss.Center).
-		BorderLeft(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(theme.ColBlue)
-
-	return style.Render(content)
+		Render(g.tableView.Trump.Symbol() + " " + g.tableView.Trump.String())
 }
 
 // contractLines renders the current contract (who called trump, and "alone")
@@ -1697,15 +1690,13 @@ func (g *GamePlay) contractLines() []string {
 		return nil
 	}
 	makerName := g.tableView.PlayerNames[maker]
-	nameStyle := theme.Current.Muted.Width(panelInnerWidth).Align(lipgloss.Center)
-	out := []string{"", nameStyle.Render("called by"), nameStyle.Render(makerName)}
+	out := []string{
+		panelCenter(theme.Current.Muted, "called by"),
+		panelCenter(theme.Current.Body, makerName),
+	}
 	if g.tableView.MakerAlone {
-		aloneStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E67E22")).
-			Bold(true).
-			Width(panelInnerWidth).
-			Align(lipgloss.Center)
-		out = append(out, aloneStyle.Render("ALONE"))
+		aloneStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E67E22")).Bold(true)
+		out = append(out, panelCenter(aloneStyle, "ALONE"))
 	}
 	return out
 }
