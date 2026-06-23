@@ -18,8 +18,8 @@ import (
 )
 
 const aiTurnDelay = 500 * time.Millisecond
-const aiBidDelay = 1200 * time.Millisecond // Slower for bidding so user can follow
-const dealCardDelay = 100 * time.Millisecond
+const aiBidDelay = 1200 * time.Millisecond   // Slower for bidding so user can follow
+const dealCardDelay = 170 * time.Millisecond // per dealt packet (2 or 3 cards)
 
 // Animation timing constants
 const (
@@ -54,7 +54,7 @@ type GamePlay struct {
 	waitingForTrickAck bool                // Waiting for user to acknowledge trick result
 	completedTrick     *engine.TrickResult // The completed trick to display
 	isDealing          bool                // Currently animating the deal
-	dealStep           int                 // Current step in deal animation (0-19: 20 cards dealt)
+	dealStep           int                 // Current deal packet dealt (0-8: Euchre 2s & 3s)
 	waitingForRoundAck bool                // Waiting for user to acknowledge round result
 
 	// Animation states
@@ -200,14 +200,14 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return g, nil
 
 	case dealCardMsg:
-		// Animate dealing one card
+		// Animate dealing one packet (Euchre deals in 2s and 3s, not one at a time)
 		if !g.isDealing {
 			// Already done dealing, ignore stale message
 			return g, nil
 		}
 		g.dealStep++
 		g.updateDealingView()
-		if g.dealStep >= 20 { // All 20 cards dealt (5 per player)
+		if g.dealStep >= len(dealPacketPlan(g.game.Dealer())) { // all packets dealt
 			g.isDealing = false
 			g.message = "Revealing turned card..."
 			// Start card flip animation
@@ -1100,23 +1100,37 @@ func (g *GamePlay) nextDealCard() tea.Cmd {
 	})
 }
 
-// updateDealingView updates the table view during dealing animation
+// dealPacketPlan returns the Euchre deal as an ordered list of {player, count}
+// packets, mirroring the engine's dealPasses for 4 players: packets of 2,3,2,3
+// on the first pass then 3,2,3,2 on the second, starting to the dealer's left.
+// Each player ends with 5 cards.
+func dealPacketPlan(dealer int) [][2]int {
+	passes := [2][4]int{{2, 3, 2, 3}, {3, 2, 3, 2}}
+	plan := make([][2]int, 0, 8)
+	for _, pass := range passes {
+		for i := 0; i < 4; i++ {
+			player := (dealer + 1 + i) % 4
+			plan = append(plan, [2]int{player, pass[i]})
+		}
+	}
+	return plan
+}
+
+// updateDealingView updates the table view during the deal animation, revealing
+// one packet (2 or 3 cards) per step rather than a single card at a time.
 func (g *GamePlay) updateDealingView() {
 	dealer := g.game.Dealer()
+	plan := dealPacketPlan(dealer)
 
-	// Calculate how many cards each player has been dealt so far
-	// Cards are dealt in rotation starting left of dealer
-	// Cap dealStep at 20 to ensure max 5 cards per player
 	step := g.dealStep
-	if step > 20 {
-		step = 20
+	if step > len(plan) {
+		step = len(plan)
 	}
 
 	cardCounts := [4]int{0, 0, 0, 0}
 	for i := 0; i < step; i++ {
-		// Player index: rotate starting from left of dealer
-		playerIdx := (dealer + 1 + (i % 4)) % 4
-		cardCounts[playerIdx]++
+		player, count := plan[i][0], plan[i][1]
+		cardCounts[player] += count
 	}
 
 	// Update table view with animated card counts (cap at 5)
@@ -1134,8 +1148,8 @@ func (g *GamePlay) updateDealingView() {
 	g.tableView.Trump = engine.NoSuit
 	g.tableView.TurnPulseFrame = g.turnPulseFrame
 
-	// Show turned card after all cards are dealt (step 20)
-	if g.dealStep >= 20 {
+	// Show the turned card only once every packet has been dealt.
+	if g.dealStep >= len(plan) {
 		g.tableView.TurnedCard = g.game.TurnedCard()
 	} else {
 		g.tableView.TurnedCard = engine.Card{}
