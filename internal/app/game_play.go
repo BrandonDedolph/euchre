@@ -1133,11 +1133,7 @@ func (g *GamePlay) View() string {
 	tableStr := g.tableView.Render()
 
 	// Dealer badge style
-	dealerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#000")).
-		Background(lipgloss.Color("#f1c40f")).
-		Bold(true).
-		Padding(0, 1)
+	dealerStyle := theme.Current.DealerBadge
 
 	// Player's hand with tricks counter
 	var handStr string
@@ -1185,17 +1181,6 @@ func (g *GamePlay) View() string {
 			if round != nil && round.Trick() != nil {
 				legalPlays = engine.LegalPlays(engine.NewHandWith(hand), round.Trick())
 			}
-		}
-
-		// Debug: Check for 6-card bug during play phase
-		if phase == engine.PhasePlay && len(hand) > 5 {
-			// Show detailed debug info
-			cardNames := make([]string, len(hand))
-			for i, c := range hand {
-				cardNames[i] = c.String()
-			}
-			bugMsg := theme.Current.CardRed.Render(fmt.Sprintf("BUG: You have %d cards: %v", len(hand), cardNames))
-			playerHeader = lipgloss.JoinVertical(lipgloss.Center, bugMsg, playerName)
 		}
 
 		// Only show selection when it's your turn to select a card
@@ -1510,15 +1495,15 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 	}
 
 	// Build panel content
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71")).Bold(true)
-	scoreStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71"))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	headerStyle := theme.Current.TeamYou
+	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColGreen)
+	mutedStyle := theme.Current.Muted
 
 	// Score with animation
 	scoreStr := fmt.Sprintf("%d", scores[0])
 	if g.scoreAnimFrames > 0 && g.scoreDelta[0] > 0 {
 		scoreStr = fmt.Sprintf("%d(+%d)", scores[0], g.scoreDelta[0])
-		scoreStyle = scoreStyle.Background(lipgloss.Color("#2ECC71")).Foreground(lipgloss.Color("#FFF"))
+		scoreStyle = scoreStyle.Background(theme.ColGreen).Foreground(lipgloss.Color("#FFF"))
 	}
 
 	lines := []string{
@@ -1566,15 +1551,15 @@ func (g *GamePlay) renderRightPanel(height int) string {
 	}
 
 	// Build panel content
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
-	scoreStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C"))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	headerStyle := theme.Current.TeamOpp
+	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColRed)
+	mutedStyle := theme.Current.Muted
 
 	// Score with animation
 	scoreStr := fmt.Sprintf("%d", scores[1])
 	if g.scoreAnimFrames > 0 && g.scoreDelta[1] > 0 {
 		scoreStr = fmt.Sprintf("%d(+%d)", scores[1], g.scoreDelta[1])
-		scoreStyle = scoreStyle.Background(lipgloss.Color("#E74C3C")).Foreground(lipgloss.Color("#FFF"))
+		scoreStyle = scoreStyle.Background(theme.ColRed).Foreground(lipgloss.Color("#FFF"))
 	}
 
 	// Trump display with filled background
