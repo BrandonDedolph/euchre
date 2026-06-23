@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bran/euchre/internal/ai"
@@ -1153,6 +1154,16 @@ func (g *GamePlay) View() string {
 		height = 30
 	}
 
+	// Below this the fixed-size table can't render at all — ask for a resize
+	// rather than spilling a broken layout.
+	if width < minPlayableWidth || height < minPlayableHeight {
+		return g.renderTooSmall(width, height)
+	}
+
+	// The side HUD panels only fit on wider terminals; below that we fall back
+	// to a compact layout (table + a single scoreboard line, no panels).
+	showPanels := width >= fullLayoutMinWidth
+
 	// Show shuffle animation
 	if g.isShuffling {
 		return g.renderShuffleAnimation(width, height)
@@ -1251,15 +1262,18 @@ func (g *GamePlay) View() string {
 	centeredHand := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, handStr)
 	centerContent := tableStr + centeredHand
 
-	// Get height of center content for side panels
-	centerHeight := lipgloss.Height(centerContent)
-
-	// Create side panels
-	leftPanel := g.renderLeftPanel(centerHeight)
-	rightPanel := g.renderRightPanel(centerHeight)
-
-	// Join horizontally: left panel | center | right panel
-	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, centerContent, rightPanel)
+	// Compose the main area: full layout has side HUD panels; compact layout
+	// drops them for a single scoreboard line above the table.
+	var mainArea string
+	if showPanels {
+		centerHeight := lipgloss.Height(centerContent)
+		leftPanel := g.renderLeftPanel(centerHeight)
+		rightPanel := g.renderRightPanel(centerHeight)
+		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, centerContent, rightPanel)
+	} else {
+		scoreBar := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, g.renderScoreBar())
+		mainArea = lipgloss.JoinVertical(lipgloss.Center, scoreBar, centerContent)
+	}
 
 	// Build final layout
 	innerContent := mainArea + "\n" +
@@ -1563,11 +1577,15 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 	return style.Render(content)
 }
 
-// panelWidth/panelInnerWidth size the side panels. Inner width leaves room for
-// the 1-col border so wrapped text doesn't collide with it.
+// Layout sizing. panelWidth/panelInnerWidth size the side panels (inner width
+// leaves room for the 1-col border). The min/full thresholds decide between the
+// too-small guard, the compact (panel-less) layout, and the full HUD layout.
 const (
-	panelWidth      = 12
-	panelInnerWidth = panelWidth - 2
+	panelWidth         = 12
+	panelInnerWidth    = panelWidth - 2
+	minPlayableWidth   = 64 // table (~61 wide) + screen-border margin
+	minPlayableHeight  = 20 // enough rows for the table core
+	fullLayoutMinWidth = 89 // table + both side panels + borders
 )
 
 // eventLogLines renders the recent-events log for the side panel, wrapping each
@@ -1690,6 +1708,73 @@ func (g *GamePlay) contractLines() []string {
 		out = append(out, aloneStyle.Render("ALONE"))
 	}
 	return out
+}
+
+// renderScoreBar builds the single-line scoreboard shown above the table in the
+// compact layout, where the side HUD panels don't fit. It folds the panels'
+// key facts (scores, tricks, trump, contract, round) into one centered line.
+func (g *GamePlay) renderScoreBar() string {
+	scores := g.game.Scores()
+	var youTr, oppTr int
+	if r := g.game.Round(); r != nil {
+		youTr = r.TricksWon(0) + r.TricksWon(2)
+		oppTr = r.TricksWon(1) + r.TricksWon(3)
+	}
+
+	parts := []string{
+		theme.Current.TeamYou.Render(fmt.Sprintf("YOU %d", scores[0])),
+		theme.Current.TeamOpp.Render(fmt.Sprintf("OPP %d", scores[1])),
+		theme.Current.Muted.Render(fmt.Sprintf("Tricks %d-%d", youTr, oppTr)),
+	}
+
+	if g.tableView.Trump != engine.NoSuit {
+		trumpStyle := theme.Current.CardBlack
+		if g.tableView.Trump == engine.Hearts || g.tableView.Trump == engine.Diamonds {
+			trumpStyle = theme.Current.CardRed
+		}
+		contract := trumpStyle.Render(g.tableView.Trump.Symbol() + " " + g.tableView.Trump.String())
+		if m := g.tableView.Maker; m >= 0 && m < len(g.tableView.PlayerNames) {
+			tag := g.tableView.PlayerNames[m]
+			if g.tableView.MakerAlone {
+				tag += ", alone"
+			}
+			contract += theme.Current.Muted.Render(" (" + tag + ")")
+		}
+		parts = append(parts, contract)
+	}
+
+	parts = append(parts, theme.Current.Muted.Render(fmt.Sprintf("Rd %d", g.tableView.RoundNumber)))
+
+	return strings.Join(parts, theme.Current.Muted.Render("  •  "))
+}
+
+// renderTooSmall shows a friendly resize prompt when the terminal is below the
+// minimum playable size, instead of rendering a broken/overflowing layout.
+func (g *GamePlay) renderTooSmall(width, height int) string {
+	innerW := width - 4
+	innerH := height - 4
+	if innerW < 1 {
+		innerW = 1
+	}
+	if innerH < 1 {
+		innerH = 1
+	}
+
+	msg := lipgloss.JoinVertical(lipgloss.Center,
+		theme.Current.Title.Render("Terminal too small"),
+		"",
+		theme.Current.Body.Render(fmt.Sprintf("Resize to at least %d×%d", minPlayableWidth, minPlayableHeight)),
+		theme.Current.Muted.Render(fmt.Sprintf("(%d wide for the full layout)", fullLayoutMinWidth)),
+		"",
+		theme.Current.Muted.Render(fmt.Sprintf("current: %d×%d", width, height)),
+	)
+
+	box := theme.Current.ScreenBorder.
+		Width(width - 2).
+		Height(height - 2).
+		Render(lipgloss.Place(innerW, innerH, lipgloss.Center, lipgloss.Center, msg))
+
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
 // Messages for async operations
