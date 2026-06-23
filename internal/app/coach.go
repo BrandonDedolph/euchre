@@ -50,7 +50,17 @@ func (g *GamePlay) tutorBox() (title, body string, ok bool) {
 	case g.isDealing:
 		return "Dealing", "Euchre deals in packets — 2s and 3s — until everyone has 5 cards. The next card is turned face-up to start the bidding.", true
 	case g.waitingForTrickAck && g.completedTrick != nil:
-		return "Trick", g.trickNarration(), true
+		// If the human's play just completed the trick, lead with the move
+		// feedback so it isn't swallowed by the trick result.
+		body := g.trickNarration()
+		if g.gradeMsg != "" {
+			mark := "•"
+			if g.gradeGood {
+				mark = "✓"
+			}
+			body = mark + " " + g.gradeMsg + "  " + body
+		}
+		return "Trick", body, true
 	case g.waitingForRoundAck:
 		return "Hand over", g.message, true
 	}
@@ -60,6 +70,14 @@ func (g *GamePlay) tutorBox() (title, body string, ok bool) {
 		if tip := g.coachTip(); tip != "" {
 			return "Your turn", tip, true
 		}
+	}
+
+	// Feedback on the move just made, shown while the AIs respond.
+	if g.gradeMsg != "" {
+		if g.gradeGood {
+			return "Nice move ✓", g.gradeMsg, true
+		}
+		return "Heads up", g.gradeMsg, true
 	}
 
 	// Otherwise narrate what the player to act is doing.
@@ -137,6 +155,39 @@ func (g *GamePlay) coachTip() string {
 		return g.tipPlay()
 	}
 	return ""
+}
+
+// coachWould runs decide against a fresh game state and returns the coach's
+// choice, or the zero Card when there's no coach (non-tutorial). Used to capture
+// the recommendation just before the human commits a move, for grading.
+func (g *GamePlay) coachWould(decide func(*engine.GameState) engine.Card) engine.Card {
+	if g.coach == nil {
+		return engine.Card{}
+	}
+	return decide(engine.NewGameState(g.game))
+}
+
+// gradeCard compares the human's played/discarded card to the coach's choice and
+// records short feedback shown in the coach box until the human's next turn.
+func (g *GamePlay) gradeCard(verb string, played, coachCard engine.Card) {
+	if !g.tutorial || g.coach == nil {
+		return
+	}
+	if played.Suit == coachCard.Suit && played.Rank == coachCard.Rank {
+		g.gradeGood = true
+		if verb == "discard" {
+			g.gradeMsg = "Good pitch — Coach would discard the same card."
+		} else {
+			g.gradeMsg = "Nice — that's exactly the card Coach would play."
+		}
+		return
+	}
+	g.gradeGood = false
+	if verb == "discard" {
+		g.gradeMsg = fmt.Sprintf("Coach would have pitched %s instead.", coachCard)
+	} else {
+		g.gradeMsg = fmt.Sprintf("Coach would have played %s there.", coachCard)
+	}
 }
 
 // coachPickIndex returns the index in the human's hand of the card the coach
