@@ -1257,7 +1257,7 @@ func (g *GamePlay) View() string {
 			selectedIdx = g.selectedCard
 		}
 
-		handCards := components.RenderHand(hand, selectedIdx, legalPlays, g.tableView.Trump)
+		handCards := components.RenderHand(hand, selectedIdx, legalPlays, g.tableView.Trump, g.coachPickIndex())
 		handStr = lipgloss.JoinVertical(lipgloss.Center, playerHeader, handCards)
 	}
 

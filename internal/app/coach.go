@@ -139,6 +139,39 @@ func (g *GamePlay) coachTip() string {
 	return ""
 }
 
+// coachPickIndex returns the index in the human's hand of the card the coach
+// would play or discard right now, or -1 when there's no pick to spotlight
+// (not tutorial mode, not the human's play/discard turn, or mid-animation).
+func (g *GamePlay) coachPickIndex() int {
+	if !g.tutorial || g.coach == nil {
+		return -1
+	}
+	if g.isShuffling || g.isDealing || g.waitingForTrickAck || g.waitingForRoundAck {
+		return -1
+	}
+	if g.game.CurrentPlayer() != g.humanPlayer {
+		return -1
+	}
+
+	hand := g.game.Hand(g.humanPlayer)
+	var pick engine.Card
+	switch g.game.Phase() {
+	case engine.PhasePlay:
+		pick = g.coach.DecidePlay(engine.NewGameState(g.game))
+	case engine.PhaseDiscard:
+		pick = g.coach.DecideDiscard(engine.NewGameState(g.game), hand)
+	default:
+		return -1
+	}
+
+	for i, c := range hand {
+		if c.Suit == pick.Suit && c.Rank == pick.Rank {
+			return i
+		}
+	}
+	return -1
+}
+
 // handShape summarizes a hand relative to a candidate trump suit: how much
 // trump it holds, which bowers, and how many off-suit aces.
 type handShape struct {
