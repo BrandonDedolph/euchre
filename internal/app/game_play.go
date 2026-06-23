@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -69,19 +70,27 @@ type GamePlay struct {
 	suitSelector *components.SuitSelector
 }
 
-// rulesFromVariant maps a selected variant's options to the engine's Rules struct.
+// rulesFromVariant maps a selected variant's options to the engine's Rules
+// struct. The variant is the single source of truth for rule invariants (e.g.
+// AllowMisdeal == !StickTheDealer), so all callers route through here rather
+// than hand-building Rules.
 func rulesFromVariant(v variants.Variant) engine.Rules {
-	rules := engine.Rules{
-		StickTheDealer: v.HasStickTheDealer(),
-		AllowMisdeal:   v.AllowMisdeal(),
+	return engine.Rules{
+		StickTheDealer:   v.HasStickTheDealer(),
+		AllowMisdeal:     v.AllowMisdeal(),
+		AllowDefendAlone: v.GetBoolOption("defend_alone", false),
 	}
-	// defend_alone is an optional, per-variant boolean rule.
-	if bv, ok := v.(interface {
-		GetBoolOption(string, bool) bool
-	}); ok {
-		rules.AllowDefendAlone = bv.GetBoolOption("defend_alone", false)
-	}
-	return rules
+}
+
+// variantFromSettings builds a fresh, configured variant from the setup
+// screen's toggles. Only the standard variant exists today, so we construct it
+// directly; when more variants are added this should look up s.Variant in the
+// registry (constructing a fresh instance to avoid mutating shared singletons).
+func variantFromSettings(s GameSettings) variants.Variant {
+	v := standard.New()
+	_ = v.SetOption("stick_the_dealer", s.StickTheDealer)
+	_ = v.SetOption("defend_alone", s.DefendAlone)
+	return v
 }
 
 // NewGamePlay creates a new game play screen with default rules:
@@ -97,12 +106,7 @@ func NewGamePlay() *GamePlay {
 // NewGamePlayWithSettings creates a new game play screen using the rule toggles
 // chosen on the setup screen.
 func NewGamePlayWithSettings(s GameSettings) *GamePlay {
-	rules := engine.Rules{
-		StickTheDealer:   s.StickTheDealer,
-		AllowMisdeal:     !s.StickTheDealer,
-		AllowDefendAlone: s.DefendAlone,
-	}
-	return newGamePlay(rules)
+	return newGamePlay(rulesFromVariant(variantFromSettings(s)))
 }
 
 // newGamePlay is the shared constructor body. It builds the game from the given
@@ -673,10 +677,15 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 				Card:      card,
 			}
 			if err := g.game.ApplyAction(action); err != nil {
-				// Illegal play (e.g. must follow suit): snap selection to a legal
-				// card and point the player at the highlighted options.
+				// Illegal play: snap selection to a legal card and point the
+				// player at the highlighted options. Tailor the message to the
+				// failure so a non-follow-suit error isn't mislabeled.
 				g.selectedCard = g.firstLegalCardIndex()
-				return g.showTempMessage("Must follow suit — playable cards are highlighted in green.")
+				msg := "Can't play that card — playable cards are highlighted in green."
+				if errors.Is(err, engine.ErrMustFollowSuit) {
+					msg = "Must follow suit — playable cards are highlighted in green."
+				}
+				return g.showTempMessage(msg)
 			}
 			g.selectedCard = 0
 

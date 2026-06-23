@@ -38,6 +38,7 @@ type Variant interface {
 	Options() []RuleOption
 	SetOption(key string, value interface{}) error
 	GetOption(key string) interface{}
+	GetBoolOption(key string, defaultVal bool) bool
 }
 
 // RuleOption represents a configurable rule setting
