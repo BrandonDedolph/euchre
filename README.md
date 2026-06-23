@@ -1,19 +1,12 @@
 # Euchre
 
-![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)
+![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
 
-A terminal-based Euchre card game with AI opponents, built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+A terminal-based Euchre card game with AI opponents and a built-in coach, built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
-```
-    ███████╗██╗   ██╗ ██████╗██╗  ██╗██████╗ ███████╗
-    ██╔════╝██║   ██║██╔════╝██║  ██║██╔══██╗██╔════╝
-    █████╗  ██║   ██║██║     ███████║██████╔╝█████╗
-    ██╔══╝  ██║   ██║██║     ██╔══██║██╔══██╗██╔══╝
-    ███████╗╚██████╔╝╚██████╗██║  ██║██║  ██║███████╗
-    ╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
-```
+![Gameplay](assets/euchre.gif)
 
 ## Quick Start
 
@@ -25,20 +18,30 @@ make run
 
 ## Features
 
-- **Interactive TUI** - Card rendering, animations, and visual suit selector
-- **AI Opponents** - Rule-based AI with strategic bidding and play
-- **Learn to Play** - Interactive tutorials for beginners
-- **Quick Reference** - In-game rules with visual card examples
+- **Full game vs AI** — authentic Euchre dealt in 2s-and-3s packets, bidding, going alone, and trick play against rule-based opponents
+- **Interactive Tutorial** — play a real, randomly-dealt hand with a coach that narrates every moment, spotlights the recommended card, grades your move, and pops up teachable moments
+- **Polished TUI** — colored HUD with team scoreboards, a contract banner, a play-by-play ticker, card animations, and a responsive layout (with a compact mode for narrow terminals)
+- **Learn to Play** — guided lessons on the rules and strategy
+- **Quick Reference** — in-game rules with visual card examples
+- **Variants** — stick-the-dealer and defend-alone, toggleable in setup
+
+## Interactive Tutorial
+
+Pick **Interactive Tutorial** from the menu to play a genuine hand with a coach looking over your shoulder. The coach box narrates the deal and every player's turn, the coach's recommended card is highlighted in gold with a `▼` arrow, and key concepts (like the left bower) surface as dismissible popups the first time they come up.
+
+![Interactive tutorial](assets/euchre-tutorial.gif)
 
 ## Controls
 
 | Key | Action |
 |-----|--------|
-| `↑↓` or `jk` | Navigate |
-| `←→` or `hl` | Select card/suit |
-| `Enter` | Confirm |
+| `↑↓` or `jk` | Navigate menus |
+| `←→` or `hl` | Select card / suit |
+| `Enter` | Confirm / order up / play / continue |
 | `p` | Pass (bidding) |
-| `Esc` | Back/Quit |
+| `a` | Order up / call alone |
+| `y` / `n` | Defend alone (when offered) |
+| `Esc` | Back / Quit |
 
 ## Euchre Basics
 
@@ -62,18 +65,18 @@ make lint       # Run linter
 ```
 cmd/euchre/          # Entry point
 internal/
-  ai/rule_based/     # AI strategy
-  app/               # TUI screens
+  ai/rule_based/     # AI strategy (also drives the tutorial coach)
+  app/               # TUI screens, coach, and teachable popups
   engine/            # Game logic
-  tutorial/          # Tutorial system
-  ui/components/     # UI components
+  tutorial/          # Guided lesson system
+  ui/components/     # Card and table rendering
   variants/          # Rule variants
 ```
 </details>
 
 ## Acknowledgments
 
-Built with the [Charm](https://charm.sh) ecosystem: [Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lip Gloss](https://github.com/charmbracelet/lipgloss).
+Built with the [Charm](https://charm.sh) ecosystem: [Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lip Gloss](https://github.com/charmbracelet/lipgloss). Demo GIFs recorded with [VHS](https://github.com/charmbracelet/vhs).
 
 ## License
 
