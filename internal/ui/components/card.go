@@ -18,7 +18,11 @@ const (
 	CardStyleSelectedPlayable // Selected AND playable - green border with selection indicator
 	CardStyleDisabled
 	CardStyleFaceDown
+	CardStyleCoachPick // tutorial: the coach's recommended card - gold double border
 )
+
+// isCoachPick reports whether the style is the coach's recommended card.
+func (s CardStyle) isCoachPick() bool { return s == CardStyleCoachPick }
 
 // CardView represents a visual card component
 type CardView struct {
@@ -102,12 +106,20 @@ func (c *CardView) renderFull() string {
 
 	border := borderStyle.Render
 
+	// The coach's recommended card gets a double border to stand out from the
+	// single-border normal/playable cards.
+	tl, tr, bl, br, h, v := "┌", "┐", "└", "┘", "─", "│"
+	if c.Style.isCoachPick() {
+		tl, tr, bl, br, h, v = "╔", "╗", "╚", "╝", "═", "║"
+	}
+	rule := strings.Repeat(h, 5)
+
 	lines := []string{
-		border("┌─────┐"),
-		border("│") + interior1 + border("│"),
-		border("│") + interior2 + border("│"),
-		border("│") + interior3 + border("│"),
-		border("└─────┘"),
+		border(tl + rule + tr),
+		border(v) + interior1 + border(v),
+		border(v) + interior2 + border(v),
+		border(v) + interior3 + border(v),
+		border(bl + rule + br),
 	}
 
 	cardStr := strings.Join(lines, "\n")
@@ -174,6 +186,10 @@ func (c *CardView) getStyles() (contentStyle, borderStyle, bgStyle lipgloss.Styl
 		// Disabled: dim gray text
 		disabledStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
 		return disabledStyle, disabledStyle, bgStyle
+	case CardStyleCoachPick:
+		// Coach's recommended card: bold gold (double) border.
+		goldBorder := lipgloss.NewStyle().Foreground(theme.ColGold).Bold(true)
+		return contentStyle, goldBorder, bgStyle
 	default:
 		return contentStyle, borderStyle, bgStyle
 	}
@@ -187,9 +203,12 @@ func (c *CardView) getStyles() (contentStyle, borderStyle, bgStyle lipgloss.Styl
 //   - Dimmed/gray: Cards you cannot play right now (must follow suit)
 //   - Normal (red/black): When it's not your turn, all cards shown normally
 //   - A small trump pip on the left bower when trump is set
+//   - Gold double border + a gold "▼" arrow above: the coach's recommended card
+//     (tutorial mode); overrides the green legal-move marker on that card
+//
 // Set selectedIdx to -1 to disable selection highlighting; pass trump as
-// engine.NoSuit to skip the left-bower flag.
-func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Card, trump engine.Suit) string {
+// engine.NoSuit to skip the left-bower flag, and coachPick as -1 for no pick.
+func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Card, trump engine.Suit, coachPick int) string {
 	if len(cards) == 0 {
 		return ""
 	}
@@ -213,32 +232,39 @@ func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Car
 		isPlayable := hasPlayableInfo && playable[card.String()]
 		playableFlags[i] = isPlayable
 
-		if isSelected && isPlayable {
+		switch {
+		case i == coachPick:
+			cv.Style = CardStyleCoachPick // gold spotlight wins over other styles
+		case isSelected && isPlayable:
 			cv.Style = CardStyleSelectedPlayable
-		} else if isSelected {
+		case isSelected:
 			cv.Style = CardStyleSelected
-		} else if isPlayable {
+		case isPlayable:
 			cv.Style = CardStylePlayable
-		} else if hasPlayableInfo && !playable[card.String()] {
+		case hasPlayableInfo && !playable[card.String()]:
 			cv.Style = CardStyleDisabled
 		}
 		cardViews[i] = cv
 	}
 
-	// Render cards with raised effect for selected card, plus a "playable"
-	// marker row on top so legal cards are identifiable without relying on color.
+	// Render cards with raised effect for selected card, plus a marker row on
+	// top: a gold "▼" over the coach's pick, else a green "▾" over legal cards.
 	renderedCards := make([]string, len(cardViews))
 	cardWidth := 7 // width of a card "┌─────┐"
 	emptyLine := strings.Repeat(" ", cardWidth)
-	markStyle := theme.Current.Success.Bold(true)
+	legalMark := theme.Current.Success.Bold(true)
+	coachMark := lipgloss.NewStyle().Foreground(theme.ColGold).Bold(true)
 
 	for i, cv := range cardViews {
 		card := cv.Render()
 		isSelected := selectedIdx >= 0 && i == selectedIdx
 
 		marker := emptyLine
-		if playableFlags[i] {
-			marker = markStyle.Render(lipgloss.PlaceHorizontal(cardWidth, lipgloss.Center, "▾"))
+		switch {
+		case i == coachPick:
+			marker = coachMark.Render(lipgloss.PlaceHorizontal(cardWidth, lipgloss.Center, "▼"))
+		case playableFlags[i]:
+			marker = legalMark.Render(lipgloss.PlaceHorizontal(cardWidth, lipgloss.Center, "▾"))
 		}
 
 		var body string

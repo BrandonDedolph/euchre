@@ -4,7 +4,126 @@ import (
 	"fmt"
 
 	"github.com/bran/euchre/internal/engine"
+	"github.com/bran/euchre/internal/ui/theme"
+	"github.com/charmbracelet/lipgloss"
 )
+
+// renderCoachBox renders the always-on tutorial callout as a bordered gold box,
+// wrapping the body to fit maxWidth. Returns "" when there's nothing to show.
+func (g *GamePlay) renderCoachBox(maxWidth int) string {
+	title, body, ok := g.tutorBox()
+	if !ok {
+		return ""
+	}
+	innerW := maxWidth - 4 // account for border + horizontal padding
+	if innerW > 66 {
+		innerW = 66
+	}
+	if innerW < 12 {
+		innerW = 12
+	}
+
+	header := lipgloss.NewStyle().Bold(true).Foreground(theme.ColGold).
+		Render("💡 COACH · " + title)
+	bodyStyled := lipgloss.NewStyle().Width(innerW).Foreground(theme.ColText).Render(body)
+	content := lipgloss.JoinVertical(lipgloss.Left, header, bodyStyled)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ColGold).
+		Padding(0, 1).
+		Render(content)
+}
+
+// tutorBox returns the content for the always-on coach callout in tutorial
+// mode: a short title, a body that narrates whatever is happening (the deal,
+// other players' turns, trick results) or advises on the human's own decision,
+// and ok=false when there's nothing to show or tutorial mode is off.
+func (g *GamePlay) tutorBox() (title, body string, ok bool) {
+	if !g.tutorial {
+		return "", "", false
+	}
+
+	switch {
+	case g.isShuffling:
+		return "Dealing", "Shuffling the 24-card Euchre deck — only 9, 10, Jack, Queen, King, Ace in each suit.", true
+	case g.isDealing:
+		return "Dealing", "Euchre deals in packets — 2s and 3s — until everyone has 5 cards. The next card is turned face-up to start the bidding.", true
+	case g.waitingForTrickAck && g.completedTrick != nil:
+		// If the human's play just completed the trick, lead with the move
+		// feedback so it isn't swallowed by the trick result.
+		body := g.trickNarration()
+		if g.gradeMsg != "" {
+			mark := "•"
+			if g.gradeGood {
+				mark = "✓"
+			}
+			body = mark + " " + g.gradeMsg + "  " + body
+		}
+		return "Trick", body, true
+	case g.waitingForRoundAck:
+		return "Hand over", g.message, true
+	}
+
+	// The human's own decision: give advice.
+	if g.coach != nil && g.game.CurrentPlayer() == g.humanPlayer {
+		if tip := g.coachTip(); tip != "" {
+			return "Your turn", tip, true
+		}
+	}
+
+	// Feedback on the move just made, shown while the AIs respond.
+	if g.gradeMsg != "" {
+		if g.gradeGood {
+			return "Nice move ✓", g.gradeMsg, true
+		}
+		return "Heads up", g.gradeMsg, true
+	}
+
+	// Otherwise narrate what the player to act is doing.
+	return g.opponentNarration()
+}
+
+// trickNarration describes who just won the trick and why.
+func (g *GamePlay) trickNarration() string {
+	tr := g.completedTrick
+	if tr == nil {
+		return ""
+	}
+	who := g.tableView.PlayerNames[tr.Winner]
+	if tr.Winner == g.humanPlayer {
+		who = "You"
+	}
+	s := fmt.Sprintf("%s won the trick", who)
+	if tr.WasTrumped {
+		s += " by trumping in"
+	}
+	s += ". The highest card of the led suit wins — unless someone trumps."
+	return s
+}
+
+// opponentNarration describes what the player currently to act (an AI) is doing.
+func (g *GamePlay) opponentNarration() (title, body string, ok bool) {
+	cur := g.game.CurrentPlayer()
+	if cur < 0 || cur == g.humanPlayer {
+		return "", "", false
+	}
+	name := g.tableView.PlayerNames[cur]
+
+	switch g.game.Phase() {
+	case engine.PhaseBidRound1:
+		return "Bidding", fmt.Sprintf("%s is deciding whether to order up the %s and make it trump.", name, g.game.TurnedCard()), true
+	case engine.PhaseBidRound2:
+		return "Bidding", fmt.Sprintf("The turn-up was passed. %s may now name a different trump suit — or pass.", name), true
+	case engine.PhaseDiscard:
+		return "Discard", fmt.Sprintf("%s took the turn card into hand and is pitching one card back.", name), true
+	case engine.PhaseDefendAlone:
+		return "Defend alone?", fmt.Sprintf("%s is deciding whether to defend alone against the lone hand.", name), true
+	case engine.PhasePlay:
+		return "Playing", fmt.Sprintf("%s is choosing a card to play.", name), true
+	}
+	return "", "", false
+}
 
 // coachTip returns a short, contextual coaching tip for the human's current
 // decision in interactive-tutorial mode, or "" when there's nothing to advise
@@ -36,6 +155,72 @@ func (g *GamePlay) coachTip() string {
 		return g.tipPlay()
 	}
 	return ""
+}
+
+// coachWould runs decide against a fresh game state and returns the coach's
+// choice, or the zero Card when there's no coach (non-tutorial). Used to capture
+// the recommendation just before the human commits a move, for grading.
+func (g *GamePlay) coachWould(decide func(*engine.GameState) engine.Card) engine.Card {
+	if g.coach == nil {
+		return engine.Card{}
+	}
+	return decide(engine.NewGameState(g.game))
+}
+
+// gradeCard compares the human's played/discarded card to the coach's choice and
+// records short feedback shown in the coach box until the human's next turn.
+func (g *GamePlay) gradeCard(verb string, played, coachCard engine.Card) {
+	if !g.tutorial || g.coach == nil {
+		return
+	}
+	if played.Suit == coachCard.Suit && played.Rank == coachCard.Rank {
+		g.gradeGood = true
+		if verb == "discard" {
+			g.gradeMsg = "Good pitch — Coach would discard the same card."
+		} else {
+			g.gradeMsg = "Nice — that's exactly the card Coach would play."
+		}
+		return
+	}
+	g.gradeGood = false
+	if verb == "discard" {
+		g.gradeMsg = fmt.Sprintf("Coach would have pitched %s instead.", coachCard)
+	} else {
+		g.gradeMsg = fmt.Sprintf("Coach would have played %s there.", coachCard)
+	}
+}
+
+// coachPickIndex returns the index in the human's hand of the card the coach
+// would play or discard right now, or -1 when there's no pick to spotlight
+// (not tutorial mode, not the human's play/discard turn, or mid-animation).
+func (g *GamePlay) coachPickIndex() int {
+	if !g.tutorial || g.coach == nil {
+		return -1
+	}
+	if g.isShuffling || g.isDealing || g.waitingForTrickAck || g.waitingForRoundAck {
+		return -1
+	}
+	if g.game.CurrentPlayer() != g.humanPlayer {
+		return -1
+	}
+
+	hand := g.game.Hand(g.humanPlayer)
+	var pick engine.Card
+	switch g.game.Phase() {
+	case engine.PhasePlay:
+		pick = g.coach.DecidePlay(engine.NewGameState(g.game))
+	case engine.PhaseDiscard:
+		pick = g.coach.DecideDiscard(engine.NewGameState(g.game), hand)
+	default:
+		return -1
+	}
+
+	for i, c := range hand {
+		if c.Suit == pick.Suit && c.Rank == pick.Rank {
+			return i
+		}
+	}
+	return -1
 }
 
 // handShape summarizes a hand relative to a candidate trump suit: how much

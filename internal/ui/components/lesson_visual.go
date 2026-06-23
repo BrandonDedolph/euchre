@@ -172,7 +172,7 @@ func (v *LessonVisualView) renderHand() string {
 	}
 
 	// Use -1 for selectedIdx since we don't want selection highlighting
-	return RenderHand(v.Element.Cards, -1, playableCards, engine.NoSuit)
+	return RenderHand(v.Element.Cards, -1, playableCards, engine.NoSuit, -1)
 }
 
 // renderComparison renders cards side-by-side with labels

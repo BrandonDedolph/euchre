@@ -117,7 +117,7 @@ func (v *DemoTableView) Render() string {
 			// Show face-down cards for dimmed players
 			return RenderFaceDown(len(v.HandCards[idx]))
 		}
-		return RenderHand(v.HandCards[idx], -1, nil, engine.NoSuit)
+		return RenderHand(v.HandCards[idx], -1, nil, engine.NoSuit, -1)
 	}
 
 	// Render trick area (center)

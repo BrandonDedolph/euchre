@@ -45,8 +45,12 @@ type GamePlay struct {
 	game               *engine.Game
 	aiPlayers          []ai.Player
 	humanPlayer        int
-	tutorial           bool      // interactive-tutorial mode: show per-move coaching
-	coach              ai.Player // strong AI used only to suggest the human's best move
+	tutorial           bool            // interactive-tutorial mode: show per-move coaching
+	coach              ai.Player       // strong AI used only to suggest the human's best move
+	shownConcepts      map[string]bool // teachable concepts already shown this game
+	pendingPopup       *concept        // teachable-moment modal currently displayed (nil = none)
+	gradeMsg           string          // feedback on the human's last move vs the coach (cleared next turn)
+	gradeGood          bool            // whether that move matched the coach
 	selectedCard       int
 	message            string
 	eventLog           []string // recent player-facing events (most recent last)
@@ -140,6 +144,7 @@ func newGamePlay(rules engine.Rules, tutorial bool) *GamePlay {
 	// suggested best move for each decision.
 	if tutorial {
 		gp.coach = rule_based.New("Coach", gp.humanPlayer, ai.DifficultyHard)
+		gp.shownConcepts = make(map[string]bool)
 	}
 
 	// Start the first round (cards are dealt in engine, animation is visual only)
@@ -170,6 +175,19 @@ func (g *GamePlay) Init() tea.Cmd {
 
 // Update implements tea.Model
 func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// A teachable-moment popup captures keyboard input until dismissed. Non-key
+	// messages (animation ticks) still fall through so the board keeps ticking
+	// underneath; popups are only ever queued at idle points, so nothing is lost.
+	if g.pendingPopup != nil {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "enter", " ", "esc":
+				g.dismissPopup()
+			}
+			return g, nil
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		g.width = msg.Width
@@ -201,7 +219,9 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// It's the human's turn - update the display and pre-select a legal card
 		// so pressing Enter always plays a valid card by default.
 		g.selectedCard = g.firstLegalCardIndex()
+		g.gradeMsg = "" // last move's feedback has run its course
 		g.updateTableView()
+		g.maybeShowTeachable() // idle point: safe to surface a teachable popup
 		return g, nil
 
 	case tempMessageMsg:
@@ -274,6 +294,10 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			g.message = "Throw-in — everyone passed. Re-dealing…"
 			return g, nil
 		}
+
+		// Surface a teachable popup for a euchre or march now that the round
+		// result is in history (idle point: we're waiting on the round ack).
+		g.maybeShowTeachable()
 
 		// Get round result details
 		roundHistory := g.game.RoundHistory()
@@ -663,6 +687,9 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 		hand := g.game.Hand(g.humanPlayer)
 		if g.selectedCard >= 0 && g.selectedCard < len(hand) {
 			card := hand[g.selectedCard]
+			coachCard := g.coachWould(func(s *engine.GameState) engine.Card {
+				return g.coach.DecideDiscard(s, hand)
+			})
 			action := engine.DiscardAction{
 				PlayerIdx: g.humanPlayer,
 				Card:      card,
@@ -671,6 +698,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 				g.message = err.Error()
 			} else {
 				g.message = fmt.Sprintf("Discarded %s", card)
+				g.gradeCard("discard", card, coachCard)
 				g.selectedCard = 0
 				g.updateTableView()
 			}
@@ -689,6 +717,10 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 				historyLen = len(round.TrickHistory())
 			}
 
+			coachCard := g.coachWould(func(s *engine.GameState) engine.Card {
+				return g.coach.DecidePlay(s)
+			})
+
 			action := engine.PlayCardAction{
 				PlayerIdx: g.humanPlayer,
 				Card:      card,
@@ -704,6 +736,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 				}
 				return g.showTempMessage(msg)
 			}
+			g.gradeCard("play", card, coachCard)
 			g.selectedCard = 0
 
 			// Start card play animation
@@ -1184,6 +1217,11 @@ func (g *GamePlay) View() string {
 		return g.renderTooSmall(width, height)
 	}
 
+	// A teachable-moment popup takes over the screen until dismissed.
+	if g.pendingPopup != nil {
+		return g.renderPopup(width, height)
+	}
+
 	// The side HUD panels only fit on wider terminals; below that we fall back
 	// to a compact layout (table + a single scoreboard line, no panels).
 	showPanels := width >= fullLayoutMinWidth
@@ -1257,7 +1295,7 @@ func (g *GamePlay) View() string {
 			selectedIdx = g.selectedCard
 		}
 
-		handCards := components.RenderHand(hand, selectedIdx, legalPlays, g.tableView.Trump)
+		handCards := components.RenderHand(hand, selectedIdx, legalPlays, g.tableView.Trump, g.coachPickIndex())
 		handStr = lipgloss.JoinVertical(lipgloss.Center, playerHeader, handCards)
 	}
 
@@ -1316,16 +1354,12 @@ func (g *GamePlay) View() string {
 	}
 	block := lipgloss.JoinVertical(lipgloss.Center, sections...)
 
-	// Build final layout (phase + optional coach tip + help as trailing lines).
+	// Build final layout (phase + optional coach box + help as trailing lines).
 	trailing := []string{block, theme.Current.Accent.Render(phaseStr)}
-	if tip := g.coachTip(); tip != "" {
-		wrapW := mainWidth
-		if wrapW > 78 {
-			wrapW = 78
+	if g.tutorial {
+		if box := g.renderCoachBox(74); box != "" {
+			trailing = append(trailing, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, box))
 		}
-		coachStyle := lipgloss.NewStyle().Foreground(theme.ColGold).Italic(true).
-			Width(wrapW).Align(lipgloss.Center)
-		trailing = append(trailing, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, coachStyle.Render("💡 "+tip)))
 	}
 	trailing = append(trailing, theme.Current.Help.Render(helpStr))
 	innerContent := strings.Join(trailing, "\n")
