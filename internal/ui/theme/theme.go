@@ -2,6 +2,21 @@ package theme
 
 import "github.com/charmbracelet/lipgloss"
 
+// Palette holds the adaptive base colors. Each automatically resolves to the
+// Light or Dark value based on the terminal background, so text stays legible
+// whether the user runs a light or dark terminal. Card interiors deliberately
+// use fixed colors (a physical card is white with red/black ink regardless of
+// terminal), so those are not part of this palette.
+var (
+	ColBlue  = lipgloss.AdaptiveColor{Light: "#2178C4", Dark: "#3498DB"} // accents, borders
+	ColGreen = lipgloss.AdaptiveColor{Light: "#1E8449", Dark: "#2ECC71"} // your team, success
+	ColRed   = lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#E74C3C"} // opponents, error
+	ColGold  = lipgloss.AdaptiveColor{Light: "#B9770E", Dark: "#F1C40F"} // dealer badge, celebration
+	ColMuted = lipgloss.AdaptiveColor{Light: "#7F8C8D", Dark: "#95A5A6"} // secondary text
+	ColText  = lipgloss.AdaptiveColor{Light: "#2C3E50", Dark: "#ECF0F1"} // primary body text
+	ColPip   = lipgloss.AdaptiveColor{Light: "#2563EB", Dark: "#60A5FA"} // card-back pattern
+)
+
 // Theme defines the visual styling for the application
 type Theme struct {
 	// Card colors
@@ -37,6 +52,13 @@ type Theme struct {
 	MenuItemSelected lipgloss.Style
 	MenuItemDisabled lipgloss.Style
 
+	// Game table
+	TeamYou     lipgloss.Style // your team's name/score (green)
+	TeamOpp     lipgloss.Style // opponents' name/score (red)
+	DealerBadge lipgloss.Style // gold "DEALER" chip
+	CardPattern lipgloss.Style // face-down card-back pattern
+	PanelBorder lipgloss.Style // side-panel divider color
+
 	// Visual lesson elements
 	AnnotationLabel  lipgloss.Style
 	WinnerHighlight  lipgloss.Style
@@ -67,45 +89,45 @@ func Default() *Theme {
 
 		// UI elements
 		Primary: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#3498DB")),
+			Foreground(ColBlue),
 		Secondary: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#9B59B6")),
 		Accent: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E67E22")),
 		Muted: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#95A5A6")),
+			Foreground(ColMuted),
 
 		// Status
 		Success: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#27AE60")),
+			Foreground(ColGreen),
 		Warning: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F39C12")),
 		Error: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E74C3C")),
+			Foreground(ColRed),
 
 		// Layout
 		Border: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#3498DB")).
+			BorderForeground(ColBlue).
 			Padding(1, 2),
 		ScreenBorder: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#3498DB")),
+			BorderForeground(ColBlue),
 		ContentBox: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#7F8C8D")).
+			BorderForeground(ColMuted).
 			Padding(1, 2),
 		Title: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#3498DB")).
+			Foreground(ColBlue).
 			Bold(true).
 			MarginBottom(1),
 		Subtitle: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7F8C8D")).
+			Foreground(ColMuted).
 			Italic(true),
 		Body: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#2C3E50")),
+			Foreground(ColText),
 		Help: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#95A5A6")).
+			Foreground(ColMuted).
 			Italic(true),
 
 		// Menu
@@ -114,24 +136,41 @@ func Default() *Theme {
 			PaddingLeft(2),
 		MenuItemSelected: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#3498DB")).
+			Background(ColBlue).
 			Bold(true).
 			PaddingLeft(2),
 		MenuItemDisabled: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#95A5A6")).
+			Foreground(ColMuted).
 			PaddingLeft(2),
+
+		// Game table
+		TeamYou: lipgloss.NewStyle().
+			Foreground(ColGreen).
+			Bold(true),
+		TeamOpp: lipgloss.NewStyle().
+			Foreground(ColRed).
+			Bold(true),
+		DealerBadge: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#000000")).
+			Background(ColGold).
+			Bold(true).
+			Padding(0, 1),
+		CardPattern: lipgloss.NewStyle().
+			Foreground(ColPip),
+		PanelBorder: lipgloss.NewStyle().
+			Foreground(ColBlue),
 
 		// Visual lesson elements
 		AnnotationLabel: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#3498DB")).
+			Foreground(ColBlue).
 			Bold(true),
 		WinnerHighlight: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#27AE60")).
+			Foreground(ColGreen).
 			Bold(true),
 		LoserDim: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#95A5A6")),
+			Foreground(ColMuted),
 		VisualCaption: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7F8C8D")).
+			Foreground(ColMuted).
 			Italic(true),
 		LessonText: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFF8E7")),

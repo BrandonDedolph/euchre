@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bran/euchre/internal/ai"
@@ -46,6 +47,7 @@ type GamePlay struct {
 	humanPlayer        int
 	selectedCard       int
 	message            string
+	eventLog           []string // recent player-facing events (most recent last)
 	tableView          *components.TableView
 	width              int
 	height             int
@@ -175,6 +177,7 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case aiBidMsg:
 		// AI made a bid, use longer delay so user can follow
 		g.message = msg.message
+		g.pushEvent(msg.message)
 		g.updateTableView()
 		return g, tea.Tick(aiBidDelay, func(t time.Time) tea.Msg {
 			return aiContinueMsg{}
@@ -237,6 +240,7 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			trickMsg += " with trump"
 		}
 		g.message = trickMsg
+		g.pushEvent(trickMsg)
 		return g, nil
 
 	case roundCompleteMsg:
@@ -473,6 +477,7 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			// Start next round with shuffle animation
 			g.game.StartRound()
+			g.eventLog = nil // fresh log for the new deal
 			g.isShuffling = true
 			g.shuffleStep = 0
 			g.isDealing = false
@@ -619,6 +624,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = "You ordered it up!"
+			g.pushEvent(g.message)
 			g.updateTableView()
 		}
 
@@ -637,6 +643,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = fmt.Sprintf("You called %s!", suit)
+			g.pushEvent(g.message)
 			g.suitSelector = nil // Reset for next time
 			g.updateTableView()
 		}
@@ -741,6 +748,7 @@ func (g *GamePlay) handlePass() (tea.Model, tea.Cmd) {
 		g.message = err.Error()
 	} else {
 		g.message = "You passed"
+		g.pushEvent(g.message)
 		g.updateTableView()
 	}
 
@@ -767,6 +775,7 @@ func (g *GamePlay) handleAlone() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = "Going alone!"
+			g.pushEvent("You're going alone!")
 			g.updateTableView()
 		}
 	}
@@ -799,6 +808,7 @@ func (g *GamePlay) handleDefendAlone(declare bool) (tea.Model, tea.Cmd) {
 		} else {
 			g.message = "You decline to defend alone"
 		}
+		g.pushEvent(g.message)
 		g.updateTableView()
 	}
 
@@ -833,6 +843,7 @@ func (g *GamePlay) handleCallSuit(suit engine.Suit, alone bool) (tea.Model, tea.
 	}
 
 	g.message = fmt.Sprintf("You called %s!", suit)
+	g.pushEvent(g.message)
 	g.suitSelector = nil // Reset suit selector
 	g.updateTableView()
 	return g, g.processAITurns()
@@ -906,12 +917,14 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 					return aiErrorMsg{err: err, player: current, action: "defend-alone"}
 				}
 				g.message = fmt.Sprintf("%s defends alone!", playerName)
+				g.pushEvent(g.message)
 			} else {
 				action := engine.PassAction{PlayerIdx: current}
 				if err := g.game.ApplyAction(action); err != nil {
 					return aiErrorMsg{err: err, player: current, action: "defend-alone-pass"}
 				}
 				g.message = fmt.Sprintf("%s declines to defend alone", playerName)
+				g.pushEvent(g.message)
 			}
 
 		case engine.PhasePlay:
@@ -1028,6 +1041,23 @@ func (g *GamePlay) firstLegalCardIndex() int {
 	return 0
 }
 
+// pushEvent appends a player-facing event to the recent-events log shown in the
+// side panel, keeping only the most recent few. Empty/duplicate-of-last events
+// are ignored to avoid noise.
+func (g *GamePlay) pushEvent(msg string) {
+	const maxEvents = 4
+	if msg == "" {
+		return
+	}
+	if n := len(g.eventLog); n > 0 && g.eventLog[n-1] == msg {
+		return
+	}
+	g.eventLog = append(g.eventLog, msg)
+	if len(g.eventLog) > maxEvents {
+		g.eventLog = g.eventLog[len(g.eventLog)-maxEvents:]
+	}
+}
+
 // showTempMessage shows a temporary message that reverts after a delay
 func (g *GamePlay) showTempMessage(msg string) (tea.Model, tea.Cmd) {
 	originalMsg := g.message
@@ -1124,6 +1154,16 @@ func (g *GamePlay) View() string {
 		height = 30
 	}
 
+	// Below this the fixed-size table can't render at all — ask for a resize
+	// rather than spilling a broken layout.
+	if width < minPlayableWidth || height < minPlayableHeight {
+		return g.renderTooSmall(width, height)
+	}
+
+	// The side HUD panels only fit on wider terminals; below that we fall back
+	// to a compact layout (table + a single scoreboard line, no panels).
+	showPanels := width >= fullLayoutMinWidth
+
 	// Show shuffle animation
 	if g.isShuffling {
 		return g.renderShuffleAnimation(width, height)
@@ -1133,11 +1173,7 @@ func (g *GamePlay) View() string {
 	tableStr := g.tableView.Render()
 
 	// Dealer badge style
-	dealerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#000")).
-		Background(lipgloss.Color("#f1c40f")).
-		Bold(true).
-		Padding(0, 1)
+	dealerStyle := theme.Current.DealerBadge
 
 	// Player's hand with tricks counter
 	var handStr string
@@ -1159,7 +1195,7 @@ func (g *GamePlay) View() string {
 		}
 
 		// Build player header with name, inline tricks, and dealer badge
-		tricksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+		tricksStyle := theme.Current.Muted
 		tricksStr := tricksStyle.Render(fmt.Sprintf("(%d)", playerTricks))
 		playerName := theme.Current.Primary.Render("You") + " " + tricksStr
 		if g.game.Dealer() == g.humanPlayer {
@@ -1187,17 +1223,6 @@ func (g *GamePlay) View() string {
 			}
 		}
 
-		// Debug: Check for 6-card bug during play phase
-		if phase == engine.PhasePlay && len(hand) > 5 {
-			// Show detailed debug info
-			cardNames := make([]string, len(hand))
-			for i, c := range hand {
-				cardNames[i] = c.String()
-			}
-			bugMsg := theme.Current.CardRed.Render(fmt.Sprintf("BUG: You have %d cards: %v", len(hand), cardNames))
-			playerHeader = lipgloss.JoinVertical(lipgloss.Center, bugMsg, playerName)
-		}
-
 		// Only show selection when it's your turn to select a card
 		// Must be in discard/play phase, your turn, and not waiting for acknowledgment
 		selectedIdx := -1
@@ -1208,12 +1233,12 @@ func (g *GamePlay) View() string {
 			selectedIdx = g.selectedCard
 		}
 
-		handCards := components.RenderHand(hand, selectedIdx, legalPlays)
+		handCards := components.RenderHand(hand, selectedIdx, legalPlays, g.tableView.Trump)
 		handStr = lipgloss.JoinVertical(lipgloss.Center, playerHeader, handCards)
 	}
 
-	// Fixed height for hand area (1 name + 5 cards + 1 raised = 7)
-	handStr = lipgloss.NewStyle().Height(7).Render(handStr)
+	// Fixed height for hand area (1 name + 1 playable marker + 5 cards + 1 raised = 8)
+	handStr = lipgloss.NewStyle().Height(8).Render(handStr)
 
 	// Build status bar with phase message (trump info now in side panel)
 	phaseStr := g.getPhaseMessage()
@@ -1237,15 +1262,18 @@ func (g *GamePlay) View() string {
 	centeredHand := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, handStr)
 	centerContent := tableStr + centeredHand
 
-	// Get height of center content for side panels
-	centerHeight := lipgloss.Height(centerContent)
-
-	// Create side panels
-	leftPanel := g.renderLeftPanel(centerHeight)
-	rightPanel := g.renderRightPanel(centerHeight)
-
-	// Join horizontally: left panel | center | right panel
-	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, centerContent, rightPanel)
+	// Compose the main area: full layout has side HUD panels; compact layout
+	// drops them for a single scoreboard line above the table.
+	var mainArea string
+	if showPanels {
+		centerHeight := lipgloss.Height(centerContent)
+		leftPanel := g.renderLeftPanel(centerHeight)
+		rightPanel := g.renderRightPanel(centerHeight)
+		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, centerContent, rightPanel)
+	} else {
+		scoreBar := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, g.renderScoreBar())
+		mainArea = lipgloss.JoinVertical(lipgloss.Center, scoreBar, centerContent)
+	}
 
 	// Build final layout
 	innerContent := mainArea + "\n" +
@@ -1510,15 +1538,15 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 	}
 
 	// Build panel content
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71")).Bold(true)
-	scoreStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2ECC71"))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	headerStyle := theme.Current.TeamYou
+	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColGreen)
+	mutedStyle := theme.Current.Muted
 
 	// Score with animation
 	scoreStr := fmt.Sprintf("%d", scores[0])
 	if g.scoreAnimFrames > 0 && g.scoreDelta[0] > 0 {
 		scoreStr = fmt.Sprintf("%d(+%d)", scores[0], g.scoreDelta[0])
-		scoreStyle = scoreStyle.Background(lipgloss.Color("#2ECC71")).Foreground(lipgloss.Color("#FFF"))
+		scoreStyle = scoreStyle.Background(theme.ColGreen).Foreground(lipgloss.Color("#FFF"))
 	}
 
 	lines := []string{
@@ -1532,18 +1560,52 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 		mutedStyle.Render(fmt.Sprintf("Round %d", g.tableView.RoundNumber)),
 	}
 
+	// Recent-events log fills the otherwise-empty lower panel.
+	lines = append(lines, g.eventLogLines(panelInnerWidth)...)
+
 	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
 
 	// Style with fixed width and height, right border
 	style := lipgloss.NewStyle().
-		Width(12).
+		Width(panelWidth).
 		Height(height).
 		Align(lipgloss.Center).
 		BorderRight(true).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#3498DB"))
+		BorderForeground(theme.ColBlue)
 
 	return style.Render(content)
+}
+
+// Layout sizing. panelWidth/panelInnerWidth size the side panels (inner width
+// leaves room for the 1-col border). The min/full thresholds decide between the
+// too-small guard, the compact (panel-less) layout, and the full HUD layout.
+const (
+	panelWidth         = 12
+	panelInnerWidth    = panelWidth - 2
+	minPlayableWidth   = 64 // table (~61 wide) + screen-border margin
+	minPlayableHeight  = 20 // enough rows for the table core
+	fullLayoutMinWidth = 89 // table + both side panels + borders
+)
+
+// eventLogLines renders the recent-events log for the side panel, wrapping each
+// event to the panel's inner width. Returns nil when there are no events.
+func (g *GamePlay) eventLogLines(width int) []string {
+	if len(g.eventLog) == 0 {
+		return nil
+	}
+	// Show only the most recent few so the panel can't overflow.
+	const showN = 3
+	events := g.eventLog
+	if len(events) > showN {
+		events = events[len(events)-showN:]
+	}
+	evStyle := theme.Current.Muted.Width(width).Align(lipgloss.Center)
+	out := []string{"", theme.Current.Muted.Render("Recent")}
+	for _, e := range events {
+		out = append(out, evStyle.Render(e))
+	}
+	return out
 }
 
 // renderRightPanel renders the right side panel with opponent/trump info
@@ -1566,15 +1628,15 @@ func (g *GamePlay) renderRightPanel(height int) string {
 	}
 
 	// Build panel content
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C")).Bold(true)
-	scoreStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E74C3C"))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	headerStyle := theme.Current.TeamOpp
+	scoreStyle := lipgloss.NewStyle().Foreground(theme.ColRed)
+	mutedStyle := theme.Current.Muted
 
 	// Score with animation
 	scoreStr := fmt.Sprintf("%d", scores[1])
 	if g.scoreAnimFrames > 0 && g.scoreDelta[1] > 0 {
 		scoreStr = fmt.Sprintf("%d(+%d)", scores[1], g.scoreDelta[1])
-		scoreStyle = scoreStyle.Background(lipgloss.Color("#E74C3C")).Foreground(lipgloss.Color("#FFF"))
+		scoreStyle = scoreStyle.Background(theme.ColRed).Foreground(lipgloss.Color("#FFF"))
 	}
 
 	// Trump display with filled background
@@ -1610,18 +1672,109 @@ func (g *GamePlay) renderRightPanel(height int) string {
 		trumpStr,
 	}
 
+	// Contract: who called trump and whether they're alone.
+	lines = append(lines, g.contractLines()...)
+
 	content := lipgloss.JoinVertical(lipgloss.Center, lines...)
 
 	// Style with fixed width and height, left border
 	style := lipgloss.NewStyle().
-		Width(12).
+		Width(panelWidth).
 		Height(height).
 		Align(lipgloss.Center).
 		BorderLeft(true).
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#3498DB"))
+		BorderForeground(theme.ColBlue)
 
 	return style.Render(content)
+}
+
+// contractLines renders the current contract (who called trump, and "alone")
+// for the side panel. Returns nil before trump is set.
+func (g *GamePlay) contractLines() []string {
+	maker := g.tableView.Maker
+	if maker < 0 || maker >= len(g.tableView.PlayerNames) {
+		return nil
+	}
+	makerName := g.tableView.PlayerNames[maker]
+	nameStyle := theme.Current.Muted.Width(panelInnerWidth).Align(lipgloss.Center)
+	out := []string{"", nameStyle.Render("called by"), nameStyle.Render(makerName)}
+	if g.tableView.MakerAlone {
+		aloneStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E67E22")).
+			Bold(true).
+			Width(panelInnerWidth).
+			Align(lipgloss.Center)
+		out = append(out, aloneStyle.Render("ALONE"))
+	}
+	return out
+}
+
+// renderScoreBar builds the single-line scoreboard shown above the table in the
+// compact layout, where the side HUD panels don't fit. It folds the panels'
+// key facts (scores, tricks, trump, contract, round) into one centered line.
+func (g *GamePlay) renderScoreBar() string {
+	scores := g.game.Scores()
+	var youTr, oppTr int
+	if r := g.game.Round(); r != nil {
+		youTr = r.TricksWon(0) + r.TricksWon(2)
+		oppTr = r.TricksWon(1) + r.TricksWon(3)
+	}
+
+	parts := []string{
+		theme.Current.TeamYou.Render(fmt.Sprintf("YOU %d", scores[0])),
+		theme.Current.TeamOpp.Render(fmt.Sprintf("OPP %d", scores[1])),
+		theme.Current.Muted.Render(fmt.Sprintf("Tricks %d-%d", youTr, oppTr)),
+	}
+
+	if g.tableView.Trump != engine.NoSuit {
+		trumpStyle := theme.Current.CardBlack
+		if g.tableView.Trump == engine.Hearts || g.tableView.Trump == engine.Diamonds {
+			trumpStyle = theme.Current.CardRed
+		}
+		contract := trumpStyle.Render(g.tableView.Trump.Symbol() + " " + g.tableView.Trump.String())
+		if m := g.tableView.Maker; m >= 0 && m < len(g.tableView.PlayerNames) {
+			tag := g.tableView.PlayerNames[m]
+			if g.tableView.MakerAlone {
+				tag += ", alone"
+			}
+			contract += theme.Current.Muted.Render(" (" + tag + ")")
+		}
+		parts = append(parts, contract)
+	}
+
+	parts = append(parts, theme.Current.Muted.Render(fmt.Sprintf("Rd %d", g.tableView.RoundNumber)))
+
+	return strings.Join(parts, theme.Current.Muted.Render("  •  "))
+}
+
+// renderTooSmall shows a friendly resize prompt when the terminal is below the
+// minimum playable size, instead of rendering a broken/overflowing layout.
+func (g *GamePlay) renderTooSmall(width, height int) string {
+	innerW := width - 4
+	innerH := height - 4
+	if innerW < 1 {
+		innerW = 1
+	}
+	if innerH < 1 {
+		innerH = 1
+	}
+
+	msg := lipgloss.JoinVertical(lipgloss.Center,
+		theme.Current.Title.Render("Terminal too small"),
+		"",
+		theme.Current.Body.Render(fmt.Sprintf("Resize to at least %d×%d", minPlayableWidth, minPlayableHeight)),
+		theme.Current.Muted.Render(fmt.Sprintf("(%d wide for the full layout)", fullLayoutMinWidth)),
+		"",
+		theme.Current.Muted.Render(fmt.Sprintf("current: %d×%d", width, height)),
+	)
+
+	box := theme.Current.ScreenBorder.
+		Width(width - 2).
+		Height(height - 2).
+		Render(lipgloss.Place(innerW, innerH, lipgloss.Center, lipgloss.Center, msg))
+
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
 // Messages for async operations

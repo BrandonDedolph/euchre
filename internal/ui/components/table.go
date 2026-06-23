@@ -76,14 +76,9 @@ func (t *TableView) Render() string {
 	return sb.String()
 }
 
-// RenderTrumpIndicator exposes the trump indicator for external use
-func (t *TableView) RenderTrumpIndicator() string {
-	return t.renderTrumpIndicator()
-}
-
 // RenderTricksTable renders a small 1x2 table for tricks
 func RenderTricksTable(tricks int) string {
-	bc := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	bc := theme.Current.Muted
 	// Center the number in a 3-char wide cell
 	numStyle := lipgloss.NewStyle().Width(3).Align(lipgloss.Center)
 	return bc.Render("┌────────┬───┐") + "\n" +
@@ -104,16 +99,11 @@ func (t *TableView) renderTopPlayer() string {
 
 	dealerBadge := ""
 	if t.Dealer == 2 {
-		dealerStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#000")).
-			Background(lipgloss.Color("#f1c40f")).
-			Bold(true).
-			Padding(0, 1)
-		dealerBadge = " " + dealerStyle.Render("DEALER")
+		dealerBadge = " " + theme.Current.DealerBadge.Render("DEALER")
 	}
 
 	// Compact header with inline tricks
-	tricksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	tricksStyle := theme.Current.Muted
 	tricksStr := tricksStyle.Render(fmt.Sprintf("(%d)", tricks))
 	header := fmt.Sprintf("%s%s %s%s", name, indicator, tricksStr, dealerBadge)
 	header = lipgloss.PlaceHorizontal(t.Width, lipgloss.Center, header)
@@ -156,7 +146,7 @@ func (t *TableView) renderSidePlayer(playerIdx int, isLeft bool) string {
 	}
 
 	// Compact header with inline tricks
-	tricksStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8C8D"))
+	tricksStyle := theme.Current.Muted
 	header := fmt.Sprintf("%s%s", name, indicator)
 	tricksStr := tricksStyle.Render(fmt.Sprintf("(%d)", tricks))
 
@@ -168,11 +158,7 @@ func (t *TableView) renderSidePlayer(playerIdx int, isLeft bool) string {
 
 	// Show DEALER on separate line above name if this player is dealer
 	if t.Dealer == playerIdx {
-		dealerStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#000")).
-			Background(lipgloss.Color("#f1c40f")).
-			Bold(true)
-		sb.WriteString(dealerStyle.Render("DEALER"))
+		sb.WriteString(theme.Current.DealerBadge.Render("DEALER"))
 		sb.WriteString("\n")
 	}
 
@@ -245,7 +231,7 @@ func (t *TableView) renderTrickArea() string {
 		// Outer border
 		style := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#3498DB")).
+			BorderForeground(theme.ColBlue).
 			Padding(0, 1)
 
 		return style.Render(content)
@@ -331,55 +317,10 @@ func (t *TableView) renderTrickArea() string {
 	// Outer border
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#3498DB")).
+		BorderForeground(theme.ColBlue).
 		Padding(0, 1)
 
 	return style.Render(content)
-}
-
-// renderTrumpIndicator shows the current trump, round number, and who called it
-func (t *TableView) renderTrumpIndicator() string {
-	var parts []string
-
-	// Round number
-	if t.RoundNumber > 0 {
-		roundStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#3498DB")).
-			Bold(true)
-		parts = append(parts, roundStyle.Render(fmt.Sprintf("Round %d", t.RoundNumber)))
-	}
-
-	if t.Trump == engine.NoSuit {
-		if t.TurnedCard.Suit != engine.NoSuit {
-			parts = append(parts, theme.Current.Muted.Render("Bidding..."))
-		} else {
-			parts = append(parts, theme.Current.Muted.Render("Dealing..."))
-		}
-		return strings.Join(parts, "  •  ")
-	}
-
-	// Trump suit
-	trumpStyle := theme.Current.CardBlack
-	if t.Trump == engine.Hearts || t.Trump == engine.Diamonds {
-		trumpStyle = theme.Current.CardRed
-	}
-	parts = append(parts, fmt.Sprintf("Trump: %s", trumpStyle.Render(t.Trump.Symbol()+" "+t.Trump.String())))
-
-	// Going alone indicator
-	if t.MakerAlone {
-		aloneStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#E67E22")).
-			Bold(true)
-		parts = append(parts, aloneStyle.Render("ALONE"))
-	}
-
-	// Who called trump
-	if t.Maker >= 0 && t.Maker < len(t.PlayerNames) {
-		makerName := t.PlayerNames[t.Maker]
-		parts = append(parts, theme.Current.Muted.Render(fmt.Sprintf("(%s)", makerName)))
-	}
-
-	return strings.Join(parts, "  •  ")
 }
 
 // min returns the minimum of two integers
@@ -407,7 +348,7 @@ func (t *TableView) renderTurnIndicator() string {
 // renderFlipAnimation renders the card flip animation at given progress (0.0 to 1.0)
 func (t *TableView) renderFlipAnimation(progress float64) string {
 	borderStyle := theme.Current.Muted
-	patternStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#2563EB"))
+	patternStyle := theme.Current.CardPattern
 
 	border := borderStyle.Render
 	pattern := patternStyle.Render
