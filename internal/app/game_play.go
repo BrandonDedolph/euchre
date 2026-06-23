@@ -1551,15 +1551,14 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 	return panelBox("YOU", theme.ColGreen, body, height)
 }
 
-// Layout sizing. panelWidth/panelInnerWidth size the side panels (inner width
-// leaves room for the 1-col border). The min/full thresholds decide between the
-// too-small guard, the compact (panel-less) layout, and the full HUD layout.
+// Layout sizing. panelInnerWidth is the content width inside each side-panel box
+// (outer = 13 incl. the rounded border). The min/full thresholds decide between
+// the too-small guard, the compact (panel-less) layout, and the full HUD layout.
 const (
-	panelInnerWidth    = 11                  // content width inside a panel box
-	panelWidth         = panelInnerWidth + 2 // outer width incl. rounded border = 13
-	minPlayableWidth   = 64                  // table (~61 wide) + screen-border margin
-	minPlayableHeight  = 20                  // enough rows for the table core
-	fullLayoutMinWidth = 89                  // table + both side panel boxes + borders
+	panelInnerWidth    = 11 // content width inside a panel box (outer = 13 incl. border)
+	minPlayableWidth   = 64 // table (~61 wide) + screen-border margin
+	minPlayableHeight  = 20 // enough rows for the table core
+	fullLayoutMinWidth = 89 // table (61) + both panel boxes (13 each) + screen border
 )
 
 // panelBox wraps a panel's body in a rounded border with a colored title bar,
