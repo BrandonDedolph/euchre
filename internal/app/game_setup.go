@@ -13,6 +13,7 @@ type GameSettings struct {
 	Variant        string
 	StickTheDealer bool
 	DefendAlone    bool
+	Tutorial       bool // enable the interactive coach (random hand + per-move tips)
 }
 
 // GameSetup is the game setup screen
