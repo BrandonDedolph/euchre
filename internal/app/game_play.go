@@ -45,8 +45,10 @@ type GamePlay struct {
 	game               *engine.Game
 	aiPlayers          []ai.Player
 	humanPlayer        int
-	tutorial           bool      // interactive-tutorial mode: show per-move coaching
-	coach              ai.Player // strong AI used only to suggest the human's best move
+	tutorial           bool            // interactive-tutorial mode: show per-move coaching
+	coach              ai.Player       // strong AI used only to suggest the human's best move
+	shownConcepts      map[string]bool // teachable concepts already shown this game
+	pendingPopup       *concept        // teachable-moment modal currently displayed (nil = none)
 	selectedCard       int
 	message            string
 	eventLog           []string // recent player-facing events (most recent last)
@@ -140,6 +142,7 @@ func newGamePlay(rules engine.Rules, tutorial bool) *GamePlay {
 	// suggested best move for each decision.
 	if tutorial {
 		gp.coach = rule_based.New("Coach", gp.humanPlayer, ai.DifficultyHard)
+		gp.shownConcepts = make(map[string]bool)
 	}
 
 	// Start the first round (cards are dealt in engine, animation is visual only)
@@ -170,6 +173,19 @@ func (g *GamePlay) Init() tea.Cmd {
 
 // Update implements tea.Model
 func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// A teachable-moment popup captures keyboard input until dismissed. Non-key
+	// messages (animation ticks) still fall through so the board keeps ticking
+	// underneath; popups are only ever queued at idle points, so nothing is lost.
+	if g.pendingPopup != nil {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "enter", " ", "esc":
+				g.dismissPopup()
+			}
+			return g, nil
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		g.width = msg.Width
@@ -202,6 +218,7 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// so pressing Enter always plays a valid card by default.
 		g.selectedCard = g.firstLegalCardIndex()
 		g.updateTableView()
+		g.maybeShowTeachable() // idle point: safe to surface a teachable popup
 		return g, nil
 
 	case tempMessageMsg:
@@ -274,6 +291,10 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			g.message = "Throw-in — everyone passed. Re-dealing…"
 			return g, nil
 		}
+
+		// Surface a teachable popup for a euchre or march now that the round
+		// result is in history (idle point: we're waiting on the round ack).
+		g.maybeShowTeachable()
 
 		// Get round result details
 		roundHistory := g.game.RoundHistory()
@@ -1182,6 +1203,11 @@ func (g *GamePlay) View() string {
 	// rather than spilling a broken layout.
 	if width < minPlayableWidth || height < minPlayableHeight {
 		return g.renderTooSmall(width, height)
+	}
+
+	// A teachable-moment popup takes over the screen until dismissed.
+	if g.pendingPopup != nil {
+		return g.renderPopup(width, height)
 	}
 
 	// The side HUD panels only fit on wider terminals; below that we fall back
