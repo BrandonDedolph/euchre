@@ -75,8 +75,13 @@ func TestPlayTip_VoidOnlyTrump_PartnerWinning_NotSteal(t *testing.T) {
 	if strings.Contains(strings.ToLower(tip), "steal") {
 		t.Errorf("forced trump while partner wins must not be framed as stealing: %q", tip)
 	}
-	if !strings.Contains(tip, "partner has the trick") {
-		t.Errorf("should say partner has the trick: %q", tip)
+	// Trumping in here takes the trick FROM the partner, so the tip must NOT
+	// claim the partner keeps/has the trick.
+	if strings.Contains(strings.ToLower(tip), "partner has the trick") {
+		t.Errorf("must not claim partner keeps the trick when forced to overtrump: %q", tip)
+	}
+	if !strings.Contains(tip, "trump in") || !strings.Contains(strings.ToLower(tip), "partner was winning") {
+		t.Errorf("should frame it as a forced overtrump even though the partner was ahead: %q", tip)
 	}
 }
 
@@ -110,6 +115,14 @@ func TestPositionClue_SecondHandLow(t *testing.T) {
 func TestPositionClue_NoneWhenPartnerWinningThird(t *testing.T) {
 	if got := positionClue(2, true, false); got != "" {
 		t.Errorf("partner winning should suppress third-hand-high: %q", got)
+	}
+}
+
+func TestPositionClue_SecondHandLow_SuppressedWhenPartnerWinning(t *testing.T) {
+	// 2nd hand, can't win, but the partner is the one ahead: the second-hand-low
+	// frame is wrong here (it's really "duck under partner", said elsewhere).
+	if got := positionClue(1, true, false); got != "" {
+		t.Errorf("partner winning should suppress second-hand-low: %q", got)
 	}
 }
 
@@ -234,6 +247,20 @@ func TestLeadTip_BossAceWhenTrumpGone(t *testing.T) {
 	got := leadTipText(card(engine.Hearts, engine.Ace), trump, s, 5)
 	if !strings.Contains(got, "Most trump are gone") {
 		t.Errorf("ace with most trump gone should be flagged as boss: %q", got)
+	}
+}
+
+func TestLeadTip_BossAceThreshold(t *testing.T) {
+	trump := engine.Spades
+	s := handShape{offAces: 1}
+	// 7 trump exist total; with only 4 seen, up to 3 are still out, so the "boss"
+	// claim is not yet reliable.
+	if got := leadTipText(card(engine.Hearts, engine.Ace), trump, s, 4); strings.Contains(got, "Most trump are gone") {
+		t.Errorf("4 trump seen should NOT claim the ace is boss: %q", got)
+	}
+	// At 5 seen, at most 2 remain — the claim is reliable.
+	if got := leadTipText(card(engine.Hearts, engine.Ace), trump, s, 5); !strings.Contains(got, "Most trump are gone") {
+		t.Errorf("5 trump seen should claim the ace is boss: %q", got)
 	}
 }
 

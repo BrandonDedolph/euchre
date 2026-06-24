@@ -340,8 +340,10 @@ func seatPhrase(seat int, names []string) string {
 func positionClue(playedSoFar int, partnerWinning, canWin bool) string {
 	switch playedSoFar {
 	case 1:
-		// 2nd hand: two opponents still to act behind you.
-		if !canWin {
+		// 2nd hand: two opponents still to act behind you. The second-hand-low
+		// rationale only applies when an opponent leads/is winning — if your own
+		// partner is ahead, "duck under partner" is the right frame (said elsewhere).
+		if !canWin && !partnerWinning {
 			return "Second hand plays low — save high cards for when they'll matter."
 		}
 	case 2:
@@ -570,7 +572,7 @@ func defendAloneTipText(s handShape) string {
 		}
 		return fmt.Sprintf("Worth defending alone — %s gives a real shot at 3 tricks for 4 points.", desc)
 	}
-	return "Decline — defending alone needs the right bower or three-plus trump, and this hand falls short."
+	return "Decline — defend alone only with a very strong hand (a bower plus trump support), and this hand falls short."
 }
 
 // tipPlay advises which card to play to the current trick, tailoring the reason
@@ -617,9 +619,11 @@ func playTipText(card engine.Card, trump engine.Suit, trick *engine.Trick, seat 
 			msg = fmt.Sprintf("Coach plays %s — you must follow %s but can't beat %s, so throw your lowest.", card, suitLabel(led), seatPhrase(st.winnerSeat, names))
 		}
 	case card.IsTrump(trump):
-		// Void in the lead suit, choosing to trump.
+		// Void in the lead suit, choosing to trump. When the partner was already
+		// winning, trumping in actually takes the trick FROM the partner — it's a
+		// forced overtrump, not a "partner keeps it" duck.
 		if st.partnerWinning {
-			msg = fmt.Sprintf("Coach plays %s — you're void and hold only trump; follow with your lowest, your partner has the trick.", card)
+			msg = fmt.Sprintf("Coach plays %s — you're void and hold only trump, so you must trump in even though your partner was winning; play your lowest.", card)
 		} else if canWin {
 			msg = fmt.Sprintf("Coach plays %s — you're void in %s, so trump over %s to steal it.", card, suitLabel(led), seatPhrase(st.winnerSeat, names))
 		} else {
@@ -680,7 +684,7 @@ func leadTipText(card engine.Card, trump engine.Suit, s handShape, trumpSeenCoun
 	// Trump-counting insight: if most trump are already gone, a remaining off-ace
 	// is likely boss.
 	var note string
-	if trumpSeenCount >= 4 && card.Rank == engine.Ace && !card.IsTrump(trump) {
+	if trumpSeenCount >= 5 && card.Rank == engine.Ace && !card.IsTrump(trump) {
 		note = " Most trump are gone, so your ace should be boss now."
 	}
 
