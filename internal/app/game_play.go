@@ -1339,30 +1339,41 @@ func (g *GamePlay) View() string {
 		scoreBar := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, g.renderScoreBar())
 		mainArea = lipgloss.JoinVertical(lipgloss.Center, scoreBar, centerContent)
 	}
-	mainWidth := lipgloss.Width(mainArea)
+	// The main area is a constant width per layout mode (fixed panel + table
+	// widths), so use it as the single content width for everything below.
+	contentWidth := lipgloss.Width(mainArea)
 
-	// Assemble vertical sections: [banner] · main area · [recent ticker].
+	// slot renders s into a fixed-width, fixed-height box. Every region below the
+	// main area is variable in length (the status message can wrap, the ticker
+	// and banner appear over time, the coach box changes per tip), so pinning
+	// each to a reserved size keeps the whole block a constant size. That in turn
+	// stops the final centering from shifting the table and panels around — the
+	// elements that are meant to stay fixed in place.
+	slot := func(s string, h int) string {
+		return lipgloss.NewStyle().
+			Width(contentWidth).
+			Height(h).
+			Align(lipgloss.Center).
+			Render(s)
+	}
+
+	// Assemble vertical sections: [banner] · main area · ticker · status ·
+	// [coach] · help. Optional regions still reserve their rows when empty so
+	// that their first appearance doesn't push the table down.
 	var sections []string
 	if showPanels {
-		if banner := g.renderContractBanner(mainWidth); banner != "" {
-			sections = append(sections, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, banner), "")
-		}
+		// Banner row + spacer below it.
+		sections = append(sections, slot(g.renderContractBanner(contentWidth), 2))
 	}
 	sections = append(sections, mainArea)
-	if ticker := g.renderRecentTicker(mainWidth); ticker != "" {
-		sections = append(sections, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, ticker))
-	}
-	block := lipgloss.JoinVertical(lipgloss.Center, sections...)
-
-	// Build final layout (phase + optional coach box + help as trailing lines).
-	trailing := []string{block, theme.Current.Accent.Render(phaseStr)}
+	sections = append(sections, slot(g.renderRecentTicker(contentWidth), 1))
+	sections = append(sections, slot(theme.Current.Accent.Render(phaseStr), 2))
 	if g.tutorial {
-		if box := g.renderCoachBox(74); box != "" {
-			trailing = append(trailing, lipgloss.PlaceHorizontal(mainWidth, lipgloss.Center, box))
-		}
+		sections = append(sections, slot(g.renderCoachBox(contentWidth), coachBoxHeight))
 	}
-	trailing = append(trailing, theme.Current.Help.Render(helpStr))
-	innerContent := strings.Join(trailing, "\n")
+	sections = append(sections, slot(theme.Current.Help.Render(helpStr), 1))
+
+	innerContent := lipgloss.JoinVertical(lipgloss.Center, sections...)
 
 	// Add celebration overlay if active
 	if g.celebrationFrames > 0 {
@@ -1637,6 +1648,12 @@ const (
 	minPlayableWidth   = 64 // table (~61 wide) + screen-border margin
 	minPlayableHeight  = 20 // enough rows for the table core
 	fullLayoutMinWidth = 89 // table (61) + both panel boxes (13 each) + screen border
+
+	// coachBoxBodyLines is the reserved height of the coach callout's body; the
+	// box renders at coachBoxHeight = header(1) + body + border(2) rows so it
+	// stays a constant size between tips.
+	coachBoxBodyLines = 4
+	coachBoxHeight    = coachBoxBodyLines + 3
 )
 
 // panelBox wraps a panel's body in a rounded border with a colored title bar,

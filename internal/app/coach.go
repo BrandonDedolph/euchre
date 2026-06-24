@@ -25,7 +25,11 @@ func (g *GamePlay) renderCoachBox(maxWidth int) string {
 
 	header := lipgloss.NewStyle().Bold(true).Foreground(theme.ColGold).
 		Render("💡 COACH · " + title)
-	bodyStyled := lipgloss.NewStyle().Width(innerW).Foreground(theme.ColText).Render(body)
+	// Reserve a constant body height so the box doesn't grow or shrink between
+	// tips of different lengths — otherwise the callout (and everything below it)
+	// shifts each time the advice changes.
+	bodyStyled := lipgloss.NewStyle().Width(innerW).Height(coachBoxBodyLines).
+		Foreground(theme.ColText).Render(body)
 	content := lipgloss.JoinVertical(lipgloss.Left, header, bodyStyled)
 
 	return lipgloss.NewStyle().

@@ -135,8 +135,10 @@ func (q *QuickReference) View() string {
 		Padding(0, 1).
 		Render(panelContent)
 
-	// Center content horizontally and place in middle area
-	centeredContent := lipgloss.Place(width, contentHeight, lipgloss.Center, lipgloss.Center, contentBox)
+	// Center horizontally, but anchor to the top of the middle area. Tabs have
+	// different content heights; top-anchoring keeps the box's top edge fixed so
+	// it doesn't jump up and down as you switch tabs.
+	centeredContent := lipgloss.Place(width, contentHeight, lipgloss.Center, lipgloss.Top, contentBox)
 
 	// Assemble: header at top, content in middle, footer at bottom
 	return header + "\n" + centeredContent + "\n" + footer

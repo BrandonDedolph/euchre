@@ -254,8 +254,10 @@ func (lj *LearningJourney) View() string {
 	footerHeight := lipgloss.Height(footer)
 	contentHeight := height - headerHeight - footerHeight - 2 // spacing
 
-	// Center content in the middle area
-	centeredContent := lipgloss.Place(width, contentHeight, lipgloss.Center, lipgloss.Center, content)
+	// Center horizontally, but anchor to the top of the middle area. Lesson
+	// sections have different heights; top-anchoring keeps the content's top edge
+	// fixed so it doesn't jump up and down as you move between sections.
+	centeredContent := lipgloss.Place(width, contentHeight, lipgloss.Center, lipgloss.Top, content)
 
 	// Assemble: header at top, content in middle, footer at bottom
 	return header + "\n" + centeredContent + "\n" + footer
