@@ -1490,7 +1490,12 @@ func (g *GamePlay) renderShuffleAnimation(width, height int) string {
 		Bold(true).
 		Render(titles[titleFrame])
 
-	content := title + "\n\n" + deckArt
+	// The title ("Shuffling." → "...") and the deck art change width every frame
+	// (single deck → split decks → merged). Center each within a constant width so
+	// the whole block stays put instead of jittering as the animation plays.
+	titleLine := lipgloss.PlaceHorizontal(shuffleArtWidth, lipgloss.Center, title)
+	deckBlock := lipgloss.PlaceHorizontal(shuffleArtWidth, lipgloss.Center, deckArt)
+	content := titleLine + "\n\n" + deckBlock
 
 	centeredContent := lipgloss.Place(width-4, height-4, lipgloss.Center, lipgloss.Center, content)
 	screenBox := theme.Current.ScreenBorder.
@@ -1648,6 +1653,11 @@ const (
 	minPlayableWidth   = 64 // table (~61 wide) + screen-border margin
 	minPlayableHeight  = 20 // enough rows for the table core
 	fullLayoutMinWidth = 89 // table (61) + both panel boxes (13 each) + screen border
+
+	// shuffleArtWidth is a constant width the shuffle title and deck art are
+	// centered within so the animation doesn't jitter as their widths change
+	// frame to frame (widest frame is the split decks at ~22 cols).
+	shuffleArtWidth = 24
 
 	// coachBoxBodyLines is the reserved height of the coach callout's body; the
 	// box renders at coachBoxHeight = header(1) + body + border(2) rows so it
