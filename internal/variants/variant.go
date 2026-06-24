@@ -31,7 +31,6 @@ type Variant interface {
 	ScoreRound(result engine.RoundResult) engine.ScoreUpdate
 
 	// Special rules
-	HasFarmersHand() bool
 	AllowMisdeal() bool
 
 	// Rule options (configurable per-variant)

@@ -18,7 +18,6 @@ func New() *Standard {
 
 	// Set default options
 	s.SetOption("stick_the_dealer", false)
-	s.SetOption("farmers_hand", false)
 	s.SetOption("defend_alone", false)
 
 	return s
@@ -144,11 +143,6 @@ func (s *Standard) ScoreRound(result engine.RoundResult) engine.ScoreUpdate {
 	return update
 }
 
-// HasFarmersHand returns whether the "no ace, no face, no trump" rule is used
-func (s *Standard) HasFarmersHand() bool {
-	return s.GetBoolOption("farmers_hand", false)
-}
-
 // AllowMisdeal returns whether a misdeal is allowed on stuck hands
 func (s *Standard) AllowMisdeal() bool {
 	return !s.HasStickTheDealer()
@@ -161,13 +155,6 @@ func (s *Standard) Options() []variants.RuleOption {
 			Key:         "stick_the_dealer",
 			Name:        "Stick the Dealer",
 			Description: "Dealer must call trump if everyone passes",
-			Type:        variants.OptionBool,
-			Default:     false,
-		},
-		{
-			Key:         "farmers_hand",
-			Name:        "Farmer's Hand",
-			Description: "Allow redeal with no ace, no face, no trump",
 			Type:        variants.OptionBool,
 			Default:     false,
 		},
