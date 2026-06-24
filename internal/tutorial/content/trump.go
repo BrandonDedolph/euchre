@@ -78,7 +78,7 @@ func registerTrumpLessons() {
 		Title:         "Following Suit",
 		Description:   "The most important rule of trick-taking",
 		Category:      tutorial.CategoryRules,
-		Order:         6,
+		Order:         7,
 		Prerequisites: []string{"rules-1"},
 		VisualSections: []tutorial.VisualSection{
 			{
@@ -144,9 +144,17 @@ func registerTrumpLessons() {
 		Title:         "Scoring in Detail",
 		Description:   "How points are awarded in Euchre",
 		Category:      tutorial.CategoryRules,
-		Order:         7,
+		Order:         8,
 		Prerequisites: []string{"basics-4"},
 		VisualSections: []tutorial.VisualSection{
+			{
+				Title: "The Game Goal",
+				TextBefore: `Each hand is worth points. They add up over
+many hands until one team reaches the target.
+
+  First team to 10 points wins the game!`,
+				TextAfter: "Every point you make—or get euchred for—\nbrings someone closer to 10.",
+			},
 			{
 				Title: "Making Your Bid",
 				TextBefore: `When your team calls trump, you need 3+ tricks:
@@ -180,7 +188,7 @@ instead your opponents score double.`,
 					},
 					"Partner sits out - you play alone!",
 				),
-				TextAfter: "Win all 5 tricks alone = 4 POINTS!\nRegular make = 1 point, Euchred = opponents get 2",
+				TextAfter: "Take 3-4 tricks alone = still just 1 point.\nWin ALL 5 alone = 4 POINTS! (Euchred = opponents get 2)",
 			},
 		},
 	})
