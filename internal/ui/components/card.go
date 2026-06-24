@@ -267,16 +267,17 @@ func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Car
 			marker = legalMark.Render(lipgloss.PlaceHorizontal(cardWidth, lipgloss.Center, "▾"))
 		}
 
-		var body string
+		// The marker hugs the top of its own card so it tracks the selection's
+		// raise/lower instead of floating at a fixed top row: directly above the
+		// raised (selected) card, and dropped a row to stay directly above the
+		// lowered (non-selected) cards. Each column stays 7 rows tall either way.
 		if isSelected {
-			// Selected card: no top padding (appears raised)
-			// Add bottom padding to maintain alignment
-			body = card + "\n" + emptyLine
+			// Selected card: raised (marker, then card, then bottom padding).
+			renderedCards[i] = marker + "\n" + card + "\n" + emptyLine
 		} else {
-			// Non-selected: add top padding (appears lower)
-			body = emptyLine + "\n" + card
+			// Non-selected: lowered (top padding, then marker, then card).
+			renderedCards[i] = emptyLine + "\n" + marker + "\n" + card
 		}
-		renderedCards[i] = marker + "\n" + body
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, renderedCards...)
