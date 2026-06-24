@@ -108,20 +108,20 @@ func NewGamePlay() *GamePlay {
 	// Map the standard variant's default options onto the engine's plain Rules
 	// struct. The engine cannot import variants (that would be a circular
 	// import), so the app layer does this translation.
-	return newGamePlay(rulesFromVariant(standard.New()), false)
+	return newGamePlay(rulesFromVariant(standard.New()), false, ai.DifficultyMedium)
 }
 
 // NewGamePlayWithSettings creates a new game play screen using the rule toggles
 // chosen on the setup screen. When s.Tutorial is set the interactive coach is
 // enabled (hands are still randomly dealt — only the per-move tips are added).
 func NewGamePlayWithSettings(s GameSettings) *GamePlay {
-	return newGamePlay(rulesFromVariant(variantFromSettings(s)), s.Tutorial)
+	return newGamePlay(rulesFromVariant(variantFromSettings(s)), s.Tutorial, s.Difficulty)
 }
 
 // newGamePlay is the shared constructor body. It builds the game from the given
 // engine rules and wires up the human/AI players, animation state, and starts
 // the first round.
-func newGamePlay(rules engine.Rules, tutorial bool) *GamePlay {
+func newGamePlay(rules engine.Rules, tutorial bool, difficulty ai.Difficulty) *GamePlay {
 	config := engine.DefaultGameConfig()
 	config.Rules = rules
 
@@ -130,7 +130,7 @@ func newGamePlay(rules engine.Rules, tutorial bool) *GamePlay {
 	gp := &GamePlay{
 		game:         game,
 		humanPlayer:  0, // Player 0 is the human
-		aiPlayers:    rule_based.CreateAIPlayers(0, ai.DifficultyMedium),
+		aiPlayers:    rule_based.CreateAIPlayers(0, difficulty),
 		tutorial:     tutorial,
 		selectedCard: 0,
 		tableView:    components.NewTableView(),

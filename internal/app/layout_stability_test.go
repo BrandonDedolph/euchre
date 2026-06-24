@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bran/euchre/internal/ai"
 	"github.com/bran/euchre/internal/engine"
 	"github.com/bran/euchre/internal/ui/components"
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,7 +34,7 @@ func rowOf(view, marker string) int { return posOf(view, marker).row }
 // state at a fixed terminal size so View() exercises the real layout path.
 func renderableGamePlay(t *testing.T, tutorial bool, w, h int) *GamePlay {
 	t.Helper()
-	g := newGamePlay(rulesFromVariant(variantFromSettings(GameSettings{Variant: "Standard"})), tutorial)
+	g := newGamePlay(rulesFromVariant(variantFromSettings(GameSettings{Variant: "Standard"})), tutorial, ai.DifficultyMedium)
 	g.isShuffling = false
 	g.isDealing = false
 	g.width = w

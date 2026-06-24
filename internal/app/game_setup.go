@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/bran/euchre/internal/ai"
 	"github.com/bran/euchre/internal/ui/components"
 	"github.com/bran/euchre/internal/ui/theme"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,7 +14,8 @@ type GameSettings struct {
 	Variant        string
 	StickTheDealer bool
 	DefendAlone    bool
-	Tutorial       bool // enable the interactive coach (random hand + per-move tips)
+	Difficulty     ai.Difficulty // opponent AI skill level (defaults to Medium)
+	Tutorial       bool          // enable the interactive coach (random hand + per-move tips)
 }
 
 // GameSetup is the game setup screen
@@ -22,6 +24,7 @@ type GameSetup struct {
 	variant        string
 	stickTheDealer bool
 	defendAlone    bool
+	difficulty     ai.Difficulty
 	width          int
 	height         int
 }
@@ -46,14 +49,19 @@ func NewGameSetup() *GameSetup {
 			Description: "Allow defenders to go alone for 4 points on euchre",
 		},
 		{
+			Label:       "AI Difficulty: Medium",
+			Description: "Skill level of the computer opponents",
+		},
+		{
 			Label:       "Back to Menu",
 			Description: "Return to the main menu",
 		},
 	}
 
 	return &GameSetup{
-		menu:    components.NewMenu("", items),
-		variant: "Standard",
+		menu:       components.NewMenu("", items),
+		variant:    "Standard",
+		difficulty: ai.DifficultyMedium,
 	}
 }
 
@@ -92,6 +100,7 @@ func (g *GameSetup) handleSelect() (tea.Model, tea.Cmd) {
 			Variant:        g.variant,
 			StickTheDealer: g.stickTheDealer,
 			DefendAlone:    g.defendAlone,
+			Difficulty:     g.difficulty,
 		})
 	case 1: // Variant toggle
 		// TODO: Cycle through variants (only Standard exists for now)
@@ -109,7 +118,17 @@ func (g *GameSetup) handleSelect() (tea.Model, tea.Cmd) {
 		} else {
 			g.menu.Items[3].Label = "Defend Alone: Off"
 		}
-	case 4: // Back
+	case 4: // AI Difficulty cycle (Easy -> Medium -> Hard -> Easy)
+		switch g.difficulty {
+		case ai.DifficultyEasy:
+			g.difficulty = ai.DifficultyMedium
+		case ai.DifficultyMedium:
+			g.difficulty = ai.DifficultyHard
+		default: // Hard (or any unexpected value) wraps back to Easy
+			g.difficulty = ai.DifficultyEasy
+		}
+		g.menu.Items[4].Label = "AI Difficulty: " + g.difficulty.String()
+	case 5: // Back
 		return g, Navigate(ScreenMainMenu)
 	}
 

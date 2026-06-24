@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/bran/euchre/internal/ai"
 	"github.com/bran/euchre/internal/ui/components"
 	"github.com/bran/euchre/internal/ui/theme"
 	tea "github.com/charmbracelet/bubbletea"
@@ -84,7 +85,7 @@ func (m *MainMenu) handleSelect() (tea.Model, tea.Cmd) {
 	case 1: // Learn to Play
 		return m, Navigate(ScreenLearningJourney)
 	case 2: // Interactive Tutorial — a real random hand with coaching
-		return m, NavigateWithData(ScreenGamePlay, GameSettings{Variant: "Standard", Tutorial: true})
+		return m, NavigateWithData(ScreenGamePlay, GameSettings{Variant: "Standard", Tutorial: true, Difficulty: ai.DifficultyMedium})
 	case 3: // Quick Reference
 		return m, Navigate(ScreenQuickReference)
 	case 4: // Quit

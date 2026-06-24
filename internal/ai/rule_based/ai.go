@@ -41,6 +41,11 @@ func (a *AI) Name() string {
 	return a.name
 }
 
+// Difficulty returns the AI's configured skill level.
+func (a *AI) Difficulty() ai.Difficulty {
+	return a.difficulty
+}
+
 // DecideBid decides what to do during bidding
 func (a *AI) DecideBid(state *engine.GameState, bidRound int) engine.BidDecision {
 	hand := state.Hand(a.playerIdx)
