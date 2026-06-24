@@ -1,6 +1,6 @@
 package variants
 
-import "github.com/bran/euchre/internal/engine"
+import "github.com/BrandonDedolph/euchre/internal/engine"
 
 // Variant defines the rules and configuration for a Euchre variant
 type Variant interface {

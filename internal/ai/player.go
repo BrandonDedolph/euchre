@@ -1,6 +1,6 @@
 package ai
 
-import "github.com/bran/euchre/internal/engine"
+import "github.com/BrandonDedolph/euchre/internal/engine"
 
 // Player represents an AI-controlled player
 type Player interface {

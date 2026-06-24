@@ -1,7 +1,7 @@
 package components
 
 import (
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 	"github.com/charmbracelet/lipgloss"
 )
 

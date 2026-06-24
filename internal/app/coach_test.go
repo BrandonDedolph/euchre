@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 func card(s engine.Suit, r engine.Rank) engine.Card { return engine.Card{Suit: s, Rank: r} }

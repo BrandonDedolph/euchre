@@ -1,6 +1,6 @@
 package rule_based
 
-import "github.com/bran/euchre/internal/engine"
+import "github.com/BrandonDedolph/euchre/internal/engine"
 
 // BiddingEvaluator handles bidding decisions
 type BiddingEvaluator struct {

@@ -3,8 +3,8 @@ package app
 import (
 	"testing"
 
-	"github.com/bran/euchre/internal/ai"
-	"github.com/bran/euchre/internal/ai/rule_based"
+	"github.com/BrandonDedolph/euchre/internal/ai"
+	"github.com/BrandonDedolph/euchre/internal/ai/rule_based"
 )
 
 // selectDifficulty drives the setup menu to the AI Difficulty item and selects

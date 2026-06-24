@@ -1,6 +1,6 @@
 package tutorial
 
-import "github.com/bran/euchre/internal/engine"
+import "github.com/BrandonDedolph/euchre/internal/engine"
 
 // VisualElementType defines the type of visual content in a lesson
 type VisualElementType int

@@ -1,8 +1,8 @@
 package content
 
 import (
-	"github.com/bran/euchre/internal/engine"
-	"github.com/bran/euchre/internal/tutorial"
+	"github.com/BrandonDedolph/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/tutorial"
 )
 
 func init() {

@@ -3,7 +3,7 @@ package rule_based
 import (
 	"testing"
 
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 func TestBiddingEvaluator_EvaluateRound1_StrongHand(t *testing.T) {

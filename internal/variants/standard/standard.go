@@ -1,8 +1,8 @@
 package standard
 
 import (
-	"github.com/bran/euchre/internal/engine"
-	"github.com/bran/euchre/internal/variants"
+	"github.com/BrandonDedolph/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/variants"
 )
 
 // Standard implements the standard 4-player Euchre variant

@@ -3,8 +3,8 @@ package components
 import (
 	"strings"
 
-	"github.com/bran/euchre/internal/engine"
-	"github.com/bran/euchre/internal/ui/theme"
+	"github.com/BrandonDedolph/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/ui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -102,20 +102,24 @@ func (c *CardView) renderFull() string {
 		Background(interiorBg).
 		Foreground(contentColor)
 
-	// Build each interior line as a complete styled unit (5 chars wide).
-	// For the left bower (the off-suit jack that plays as trump), tuck a small
-	// trump pip into the top-right corner so a learner can see it counts as
-	// trump despite its printed suit.
-	topLine := rankPad + "   "
-	if c.Trump != engine.NoSuit && c.Card.IsLeftBower(c.Trump) {
-		topLine = rankPad + "  " + c.Trump.Symbol()
+	// Build each interior line as a complete styled unit (5 cells wide). The
+	// first line carries an optional top-right marker; the trick-winner crown
+	// takes precedence over the left-bower trump pip.
+	var interior1 string
+	switch {
+	case c.Style.isTrickWinner():
+		// A gold crown marks the card that took the trick. The 👑 emoji is two
+		// cells wide, so only one filler space precedes it to keep the interior
+		// exactly 5 cells (rank=2 + space=1 + crown=2).
+		crown := lipgloss.NewStyle().Background(interiorBg).Render("👑")
+		interior1 = interiorStyle.Render(rankPad+" ") + crown
+	case c.Trump != engine.NoSuit && c.Card.IsLeftBower(c.Trump):
+		// Left bower (the off-suit jack that plays as trump): tuck a small trump
+		// pip into the top-right corner so a learner sees it counts as trump.
+		interior1 = interiorStyle.Render(rankPad + "  " + c.Trump.Symbol())
+	default:
+		interior1 = interiorStyle.Render(rankPad + "   ")
 	}
-	// The trick-winner crown takes precedence over the left-bower pip: stamp a
-	// ★ into the same top-right interior cell.
-	if c.Style.isTrickWinner() {
-		topLine = rankPad + "  ★"
-	}
-	interior1 := interiorStyle.Render(topLine)
 	interior2 := interiorStyle.Render("  " + suit + "  ")
 	interior3 := interiorStyle.Render("   " + rankPad)
 

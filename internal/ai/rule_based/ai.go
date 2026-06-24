@@ -1,8 +1,8 @@
 package rule_based
 
 import (
-	"github.com/bran/euchre/internal/ai"
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/ai"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 // AI implements a rule-based Euchre AI player

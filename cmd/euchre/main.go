@@ -4,17 +4,21 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bran/euchre/internal/app"
-	_ "github.com/bran/euchre/internal/variants/standard" // Register standard variant
+	"github.com/BrandonDedolph/euchre/internal/app"
+	_ "github.com/BrandonDedolph/euchre/internal/variants/standard" // Register standard variant
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/urfave/cli/v2"
 )
+
+// version is the build version, overridden at release time via
+// -ldflags "-X main.version=<tag>" (GoReleaser sets this from the git tag).
+var version = "dev"
 
 func main() {
 	cliApp := &cli.App{
 		Name:    "euchre",
 		Usage:   "Learn and play the classic Euchre card game",
-		Version: "0.1.0",
+		Version: version,
 		Action:  runTUI,
 		Commands: []*cli.Command{
 			{

@@ -3,8 +3,8 @@ package components
 import (
 	"strings"
 
-	"github.com/bran/euchre/internal/engine"
-	"github.com/bran/euchre/internal/ui/theme"
+	"github.com/BrandonDedolph/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/ui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 

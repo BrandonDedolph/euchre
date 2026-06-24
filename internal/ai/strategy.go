@@ -1,6 +1,6 @@
 package ai
 
-import "github.com/bran/euchre/internal/engine"
+import "github.com/BrandonDedolph/euchre/internal/engine"
 
 // Strategy defines the interface for AI decision-making strategies
 type Strategy interface {

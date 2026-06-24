@@ -3,8 +3,8 @@ package rule_based
 import (
 	"testing"
 
-	"github.com/bran/euchre/internal/ai"
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/ai"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 // TestDecideBid_StickTheDealer_AIDealerForcedToCall reproduces the original

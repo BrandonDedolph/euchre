@@ -3,7 +3,7 @@ package rule_based
 import (
 	"testing"
 
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 func TestPlayStrategy_SelectPlay_Leading(t *testing.T) {

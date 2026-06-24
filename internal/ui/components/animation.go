@@ -3,7 +3,7 @@ package components
 import (
 	"time"
 
-	"github.com/bran/euchre/internal/tutorial"
+	"github.com/BrandonDedolph/euchre/internal/tutorial"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

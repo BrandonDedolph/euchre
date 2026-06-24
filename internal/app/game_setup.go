@@ -1,9 +1,9 @@
 package app
 
 import (
-	"github.com/bran/euchre/internal/ai"
-	"github.com/bran/euchre/internal/ui/components"
-	"github.com/bran/euchre/internal/ui/theme"
+	"github.com/BrandonDedolph/euchre/internal/ai"
+	"github.com/BrandonDedolph/euchre/internal/ui/components"
+	"github.com/BrandonDedolph/euchre/internal/ui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )

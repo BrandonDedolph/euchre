@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 // names mirrors the default seating: human at 0, partner at 2, opponents 1 & 3.

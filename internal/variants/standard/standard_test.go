@@ -3,7 +3,7 @@ package standard
 import (
 	"testing"
 
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 // TestScoreRound_DefendAloneEuchre verifies a defend-alone euchre awards 4

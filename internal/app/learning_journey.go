@@ -4,11 +4,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bran/euchre/internal/engine"
-	"github.com/bran/euchre/internal/tutorial"
-	_ "github.com/bran/euchre/internal/tutorial/content" // Register lessons
-	"github.com/bran/euchre/internal/ui/components"
-	"github.com/bran/euchre/internal/ui/theme"
+	"github.com/BrandonDedolph/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/tutorial"
+	_ "github.com/BrandonDedolph/euchre/internal/tutorial/content" // Register lessons
+	"github.com/BrandonDedolph/euchre/internal/ui/components"
+	"github.com/BrandonDedolph/euchre/internal/ui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bran/euchre/internal/ai"
-	"github.com/bran/euchre/internal/engine"
-	"github.com/bran/euchre/internal/ui/components"
+	"github.com/BrandonDedolph/euchre/internal/ai"
+	"github.com/BrandonDedolph/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/ui/components"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -262,7 +262,7 @@ func fourPlayedCards() []engine.PlayedCard {
 
 // TestGamePlayTrickCrownStable verifies the static crown on the winning card
 // keeps the table anchors at constant (row,col) and the total view height
-// constant for every winning seat, and that the ★ actually renders.
+// constant for every winning seat, and that the 👑 crown actually renders.
 func TestGamePlayTrickCrownStable(t *testing.T) {
 	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 	anchors := []string{"Partner", "YOU", "OPP"}
@@ -285,12 +285,12 @@ func TestGamePlayTrickCrownStable(t *testing.T) {
 	}
 	assertAnchorsStable(t, g, anchors, mutate)
 
-	// The crown's ★ must appear on the winning card for each seat.
+	// The 👑 crown must appear on the winning card for each seat.
 	for seat := 0; seat < 4; seat++ {
 		g.tableView.CurrentTrick = fourPlayedCards()
 		g.tableView.TrickWinner = seat
-		if !strings.Contains(g.View(), "★") {
-			t.Errorf("seat %d: expected crown ★ to render on the winning card", seat)
+		if !strings.Contains(g.View(), "👑") {
+			t.Errorf("seat %d: expected crown 👑 to render on the winning card", seat)
 		}
 	}
 }

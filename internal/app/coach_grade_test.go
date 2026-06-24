@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bran/euchre/internal/engine"
+	"github.com/BrandonDedolph/euchre/internal/engine"
 )
 
 func TestGradeCardMatchAndMiss(t *testing.T) {
