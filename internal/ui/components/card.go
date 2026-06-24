@@ -121,7 +121,10 @@ func (c *CardView) renderFull() string {
 		interior1 = interiorStyle.Render(rankPad + "   ")
 	}
 	interior2 := interiorStyle.Render("  " + suit + "  ")
-	interior3 := interiorStyle.Render("   " + rankPad)
+	// Bottom-right rank: right-align the rank so a single char sits flush in the
+	// corner (mirroring the top-left). Using rankPad here would leave a trailing
+	// space that pushed single-char ranks one column off the corner.
+	interior3 := interiorStyle.Render(strings.Repeat(" ", 5-len(rank)) + rank)
 
 	border := borderStyle.Render
 
