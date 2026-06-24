@@ -1,6 +1,6 @@
 # Euchre
 
-![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)
+![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
 
@@ -8,13 +8,27 @@ A terminal-based Euchre card game with AI opponents and a built-in coach, built 
 
 ![Gameplay](assets/euchre.gif)
 
-## Quick Start
+## Install
 
+Pick whichever is easiest — the game is a single self-contained binary with no runtime dependencies.
+
+**Download a prebuilt binary (no Go needed)**
+Grab the archive for your OS/arch from the [latest release](https://github.com/BrandonDedolph/euchre/releases/latest), extract it, and run `euchre`.
+
+**With Go installed (1.24+)**
+```bash
+go install github.com/BrandonDedolph/euchre/cmd/euchre@latest
+euchre
+```
+
+**From source**
 ```bash
 git clone https://github.com/BrandonDedolph/euchre.git
 cd euchre
-make run
+make run        # or: go run ./cmd/euchre
 ```
+
+> Runs in any modern terminal; use at least an ~80×24 window (it falls back to a compact layout on narrow terminals).
 
 ## Features
 
