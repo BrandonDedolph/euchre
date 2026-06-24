@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bran/euchre/internal/engine"
+	"github.com/bran/euchre/internal/ui/components"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -245,6 +247,88 @@ func TestGamePlayStatusCentered(t *testing.T) {
 			t.Errorf("case %q: view height changed from %d to %d", name, baseHeight, got)
 		}
 	}
+}
+
+// fourPlayedCards returns one played card per seat (0..3) for trick-area tests.
+func fourPlayedCards() []engine.PlayedCard {
+	return []engine.PlayedCard{
+		{Player: 0, Card: engine.NewCard(engine.Spades, engine.Ace)},
+		{Player: 1, Card: engine.NewCard(engine.Hearts, engine.King)},
+		{Player: 2, Card: engine.NewCard(engine.Clubs, engine.Queen)},
+		{Player: 3, Card: engine.NewCard(engine.Diamonds, engine.Ten)},
+	}
+}
+
+// TestGamePlayTrickCrownStable verifies the static crown on the winning card
+// keeps the table anchors at constant (row,col) and the total view height
+// constant for every winning seat, and that the ★ actually renders.
+func TestGamePlayTrickCrownStable(t *testing.T) {
+	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
+	anchors := []string{"Partner", "YOU", "OPP"}
+
+	// Establish a baseline with four cards on the table and no crown.
+	g.tableView.CurrentTrick = fourPlayedCards()
+	g.tableView.TrickWinner = -1
+
+	mutate := map[string]func(){}
+	for seat := 0; seat < 4; seat++ {
+		seat := seat
+		mutate["crown seat "+string(rune('0'+seat))] = func() {
+			g.tableView.CurrentTrick = fourPlayedCards()
+			g.tableView.TrickWinner = seat
+		}
+	}
+	mutate["crown cleared"] = func() {
+		g.tableView.CurrentTrick = fourPlayedCards()
+		g.tableView.TrickWinner = -1
+	}
+	assertAnchorsStable(t, g, anchors, mutate)
+
+	// The crown's ★ must appear on the winning card for each seat.
+	for seat := 0; seat < 4; seat++ {
+		g.tableView.CurrentTrick = fourPlayedCards()
+		g.tableView.TrickWinner = seat
+		if !strings.Contains(g.View(), "★") {
+			t.Errorf("seat %d: expected crown ★ to render on the winning card", seat)
+		}
+	}
+}
+
+// TestGamePlayTrickSweepStable drives the trick-collect sweep at several frames
+// and asserts the anchors and total height stay constant — i.e. the converging
+// losers and the crowned winner never escape the fixed trick box.
+func TestGamePlayTrickSweepStable(t *testing.T) {
+	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
+	anchors := []string{"Partner", "YOU", "OPP"}
+
+	g.tableView.CurrentTrick = fourPlayedCards()
+	g.tableView.TrickWinner = -1
+
+	setFrame := func(winner, frame, total int) func() {
+		return func() {
+			g.tableView.TrickWinner = -1
+			g.tableView.CurrentTrick = fourPlayedCards()
+			g.tableView.TrickCollectAnim = &components.TrickCollectAnim{
+				Winner:      winner,
+				Cards:       fourPlayedCards(),
+				Frame:       frame,
+				TotalFrames: total,
+			}
+		}
+	}
+
+	mutate := map[string]func(){}
+	for f := 0; f <= 6; f++ {
+		mutate["sweep winner1 frame "+string(rune('0'+f))] = setFrame(1, f, 6)
+	}
+	mutate["sweep winner0 mid"] = setFrame(0, 3, 6)
+	mutate["sweep winner3 mid"] = setFrame(3, 3, 6)
+	mutate["sweep done"] = func() {
+		g.tableView.TrickCollectAnim = nil
+		g.tableView.CurrentTrick = fourPlayedCards()
+		g.tableView.TrickWinner = -1
+	}
+	assertAnchorsStable(t, g, anchors, mutate)
 }
 
 // TestMainMenuLayoutStable verifies the menu does not shift as the selection

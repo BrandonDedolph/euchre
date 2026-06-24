@@ -42,6 +42,7 @@ type TableView struct {
 	TurnPulseFrame int       // Animation frame for turn indicator pulse
 	RoundNumber    int       // Current round number (1-based)
 	PlayerActions  [4]string // Latest per-seat action label (e.g. "passes"); "" = none
+	TrickWinner    int       // Seat of the just-won trick's card to crown; -1 = none
 
 	// Animation states
 	CardPlayAnim     *CardPlayAnim     // Card being played animation
@@ -59,7 +60,17 @@ func NewTableView() *TableView {
 		PlayerHands: []int{5, 5, 5, 5},
 		TricksWon:   []int{0, 0, 0, 0},
 		Maker:       -1,
+		TrickWinner: -1,
 	}
+}
+
+// teamAccent returns the accent color for a seat's team: green for your team
+// (seats 0,2) and red for the opponents (seats 1,3).
+func teamAccent(seat int) lipgloss.TerminalColor {
+	if engine.Team(seat) == engine.Team(0) {
+		return theme.ColGreen
+	}
+	return theme.ColRed
 }
 
 // Render returns the visual representation of the table
@@ -247,7 +258,24 @@ func (t *TableView) renderTrickArea() string {
 		return style.Render(content)
 	}
 
-	// During play: show played cards in diamond pattern (no center card)
+	// emptySlot is a blank card-sized placeholder.
+	emptySlot := func() string {
+		return lipgloss.NewStyle().Width(cardWidth).Height(cardHeight).Render("")
+	}
+
+	// During play: show played cards in diamond pattern (no center card).
+	//
+	// Convergence padding: during the collect sweep the three LOSING cards step
+	// horizontally toward the winner/center by a bounded offset so the motion
+	// stays strictly inside the fixed trick box. We render the card into a
+	// cardWidth-wide slot and shift it with left/right padding that never
+	// exceeds the slack available within the slot/box.
+	collecting := t.TrickCollectAnim != nil
+	var collectProgress float64
+	if collecting && t.TrickCollectAnim.TotalFrames > 0 {
+		collectProgress = float64(t.TrickCollectAnim.Frame) / float64(t.TrickCollectAnim.TotalFrames)
+	}
+
 	renderCard := func(playerIdx int) string {
 		// Check if this card is being animated in
 		if t.CardPlayAnim != nil && t.CardPlayAnim.FromPlayer == playerIdx {
@@ -255,25 +283,57 @@ func (t *TableView) renderTrickArea() string {
 			return cv.Render()
 		}
 
-		// Check if trick is being collected (cards fade out)
-		if t.TrickCollectAnim != nil {
+		// Trick collection sweep: the winner's card stays bright and crowned,
+		// the losers converge toward it and fade out.
+		if collecting {
 			for _, pc := range t.TrickCollectAnim.Cards {
-				if pc.Player == playerIdx {
-					progress := float64(t.TrickCollectAnim.Frame) / float64(t.TrickCollectAnim.TotalFrames)
-					if progress > 0.75 {
-						// Almost done - show placeholder
-						return lipgloss.NewStyle().
-							Width(cardWidth).
-							Height(cardHeight).
-							Render("")
-					} else if progress > 0.5 {
-						// Fading - show dimmed card
-						cv := NewCardView(pc.Card)
-						cv.Style = CardStyleDisabled
-						return cv.Render()
-					}
-					// Still showing normally early in animation
+				if pc.Player != playerIdx {
+					continue
+				}
+				if playerIdx == t.TrickCollectAnim.Winner {
+					// Winner stays put, bright, crowned in team color.
 					cv := NewCardView(pc.Card)
+					cv.Trump = t.Trump
+					cv.Style = CardStyleTrickWinner
+					cv.AccentColor = teamAccent(playerIdx)
+					return cv.Render()
+				}
+				// Loser: fade then blank.
+				if collectProgress >= 0.75 {
+					return emptySlot()
+				}
+				cv := NewCardView(pc.Card)
+				if collectProgress >= 0.4 {
+					cv.Style = CardStyleDisabled
+				}
+				// Lean the loser horizontally toward the box center as it fades.
+				// The card is placed inside a slot of exactly cardWidth (its own
+				// width), so the alignment shift can never push it outside the
+				// fixed trick box — convergence is conveyed by the lean + fade.
+				card := cv.Render()
+				slot := lipgloss.NewStyle().Width(cardWidth).MaxWidth(cardWidth)
+				// You(0)/Partner(2) are centered already; West(1) leans right
+				// toward center, East(3) leans left toward center.
+				switch playerIdx {
+				case 1: // West: lean right (toward center)
+					return slot.Align(lipgloss.Right).Render(card)
+				case 3: // East: lean left (toward center)
+					return slot.Align(lipgloss.Left).Render(card)
+				default:
+					return slot.Align(lipgloss.Center).Render(card)
+				}
+			}
+		}
+
+		// Static crown: while reviewing a finished trick (no collect anim), the
+		// winning card wears a bold team-colored double border and a ★.
+		if t.TrickWinner >= 0 && playerIdx == t.TrickWinner && !collecting {
+			for _, pc := range t.CurrentTrick {
+				if pc.Player == playerIdx {
+					cv := NewCardView(pc.Card)
+					cv.Trump = t.Trump
+					cv.Style = CardStyleTrickWinner
+					cv.AccentColor = teamAccent(playerIdx)
 					return cv.Render()
 				}
 			}
@@ -285,12 +345,7 @@ func (t *TableView) renderTrickArea() string {
 				return cv.Render()
 			}
 		}
-		// Empty placeholder (same size as card)
-		placeholder := lipgloss.NewStyle().
-			Width(cardWidth).
-			Height(cardHeight).
-			Render("")
-		return placeholder
+		return emptySlot()
 	}
 
 	topCard := renderCard(2)    // Partner

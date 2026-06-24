@@ -32,7 +32,7 @@ const (
 	cardPlayDelay      = 60 * time.Millisecond
 	cardPlayFrames     = 5
 	trickCollectDelay  = 80 * time.Millisecond
-	trickCollectFrames = 4
+	trickCollectFrames = 6
 	turnPulseDelay     = 300 * time.Millisecond
 	celebrationDelay   = 100 * time.Millisecond
 	celebrationTotal   = 20
@@ -256,6 +256,8 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		g.waitingForTrickAck = true
 		g.completedTrick = &msg.result
 		g.tableView.CurrentTrick = msg.result.Cards
+		// Crown the winning card while the player reviews the finished trick.
+		g.tableView.TrickWinner = msg.result.Winner
 		winnerName := g.tableView.PlayerNames[msg.result.Winner]
 
 		// Use correct grammar: "You win" vs "East wins"
@@ -534,6 +536,10 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter", " ":
 			g.waitingForTrickAck = false
 			g.message = ""
+
+			// The static crown gives way to the directional sweep, which draws
+			// its own winner highlight from the collect anim.
+			g.tableView.TrickWinner = -1
 
 			// Start trick collection animation
 			if g.completedTrick != nil {
@@ -1161,6 +1167,11 @@ func (g *GamePlay) updateTableView() {
 
 	// Update current trick
 	g.tableView.CurrentTrick = round.CurrentTrick()
+
+	// The crown is owned by the trick-ack window (set in the trickDoneMsg
+	// handler, which does not route through here). Any normal table refresh
+	// means we're no longer reviewing a finished trick, so clear it.
+	g.tableView.TrickWinner = -1
 }
 
 // nextDealCard returns a command to deal the next card after a delay
@@ -1215,6 +1226,7 @@ func (g *GamePlay) updateDealingView() {
 	g.tableView.Dealer = dealer
 	g.tableView.CurrentPlayer = -1 // No one's turn during dealing
 	g.tableView.CurrentTrick = nil
+	g.tableView.TrickWinner = -1
 	g.tableView.Trump = engine.NoSuit
 	g.tableView.TurnPulseFrame = g.turnPulseFrame
 	g.tableView.PlayerActions = g.playerAction

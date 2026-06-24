@@ -18,11 +18,18 @@ const (
 	CardStyleSelectedPlayable // Selected AND playable - green border with selection indicator
 	CardStyleDisabled
 	CardStyleFaceDown
-	CardStyleCoachPick // tutorial: the coach's recommended card - gold double border
+	CardStyleCoachPick   // tutorial: the coach's recommended card - gold double border
+	CardStyleTrickWinner // the card that won the just-completed trick - bold team-colored double border + ★
 )
 
 // isCoachPick reports whether the style is the coach's recommended card.
 func (s CardStyle) isCoachPick() bool { return s == CardStyleCoachPick }
+
+// isTrickWinner reports whether the style is the trick-winning card.
+func (s CardStyle) isTrickWinner() bool { return s == CardStyleTrickWinner }
+
+// hasDoubleBorder reports whether the style uses the heavier double-line border.
+func (s CardStyle) hasDoubleBorder() bool { return s.isCoachPick() || s.isTrickWinner() }
 
 // CardView represents a visual card component
 type CardView struct {
@@ -33,6 +40,9 @@ type CardView struct {
 	// Trump, when set (not NoSuit), lets the card flag itself as the left bower
 	// — the off-suit jack that actually plays as trump — with a small trump pip.
 	Trump engine.Suit
+	// AccentColor tints the border for CardStyleTrickWinner (the winning team's
+	// color). Ignored by other styles.
+	AccentColor lipgloss.TerminalColor
 }
 
 // NewCardView creates a new card view
@@ -100,16 +110,21 @@ func (c *CardView) renderFull() string {
 	if c.Trump != engine.NoSuit && c.Card.IsLeftBower(c.Trump) {
 		topLine = rankPad + "  " + c.Trump.Symbol()
 	}
+	// The trick-winner crown takes precedence over the left-bower pip: stamp a
+	// ★ into the same top-right interior cell.
+	if c.Style.isTrickWinner() {
+		topLine = rankPad + "  ★"
+	}
 	interior1 := interiorStyle.Render(topLine)
 	interior2 := interiorStyle.Render("  " + suit + "  ")
 	interior3 := interiorStyle.Render("   " + rankPad)
 
 	border := borderStyle.Render
 
-	// The coach's recommended card gets a double border to stand out from the
-	// single-border normal/playable cards.
+	// The coach's recommended card and the trick winner get a double border to
+	// stand out from the single-border normal/playable cards.
 	tl, tr, bl, br, h, v := "┌", "┐", "└", "┘", "─", "│"
-	if c.Style.isCoachPick() {
+	if c.Style.hasDoubleBorder() {
 		tl, tr, bl, br, h, v = "╔", "╗", "╚", "╝", "═", "║"
 	}
 	rule := strings.Repeat(h, 5)
@@ -190,6 +205,15 @@ func (c *CardView) getStyles() (contentStyle, borderStyle, bgStyle lipgloss.Styl
 		// Coach's recommended card: bold gold (double) border.
 		goldBorder := lipgloss.NewStyle().Foreground(theme.ColGold).Bold(true)
 		return contentStyle, goldBorder, bgStyle
+	case CardStyleTrickWinner:
+		// Trick-winning card: bold double border in the winning team's accent
+		// color. Falls back to gold if no accent was supplied.
+		accent := c.AccentColor
+		if accent == nil {
+			accent = theme.ColGold
+		}
+		winnerBorder := lipgloss.NewStyle().Foreground(accent).Bold(true)
+		return contentStyle, winnerBorder, bgStyle
 	default:
 		return contentStyle, borderStyle, bgStyle
 	}
