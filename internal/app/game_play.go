@@ -53,7 +53,7 @@ type GamePlay struct {
 	gradeGood          bool            // whether that move matched the coach
 	selectedCard       int
 	message            string
-	eventLog           []string // recent player-facing events (most recent last)
+	playerAction       [4]string // latest per-seat action label (0=You,1=West,2=Partner,3=East)
 	tableView          *components.TableView
 	width              int
 	height             int
@@ -203,9 +203,9 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case aiBidMsg:
-		// AI made a bid, use longer delay so user can follow
+		// AI made a bid, use longer delay so user can follow. The per-seat action
+		// label was already set in processAITurns when the decision was applied.
 		g.message = msg.message
-		g.pushEvent(msg.message)
 		g.updateTableView()
 		return g, tea.Tick(aiBidDelay, func(t time.Time) tea.Msg {
 			return aiContinueMsg{}
@@ -270,7 +270,10 @@ func (g *GamePlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			trickMsg += " with trump"
 		}
 		g.message = trickMsg
-		g.pushEvent(trickMsg)
+		// During play only the trick winner's "won" label shows; clear the others
+		// (incl. any lingering bidding labels) so the board reads cleanly.
+		g.clearActions()
+		g.setAction(msg.result.Winner, "won")
 		return g, nil
 
 	case roundCompleteMsg:
@@ -511,7 +514,7 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			// Start next round with shuffle animation
 			g.game.StartRound()
-			g.eventLog = nil // fresh log for the new deal
+			g.clearActions() // fresh seat labels for the new deal
 			g.isShuffling = true
 			g.shuffleStep = 0
 			g.isDealing = false
@@ -658,7 +661,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = "You ordered it up!"
-			g.pushEvent(g.message)
+			g.setAction(g.humanPlayer, "orders up")
 			g.updateTableView()
 		}
 
@@ -677,7 +680,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = fmt.Sprintf("You called %s!", suit)
-			g.pushEvent(g.message)
+			g.setAction(g.humanPlayer, "calls "+suit.Symbol())
 			g.suitSelector = nil // Reset for next time
 			g.updateTableView()
 		}
@@ -698,6 +701,7 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 				g.message = err.Error()
 			} else {
 				g.message = fmt.Sprintf("Discarded %s", card)
+				g.setAction(g.humanPlayer, "picks it up")
 				g.gradeCard("discard", card, coachCard)
 				g.selectedCard = 0
 				g.updateTableView()
@@ -715,6 +719,12 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 			historyLen := 0
 			if round != nil {
 				historyLen = len(round.TrickHistory())
+			}
+
+			// Leading a new trick: clear stale seat labels (any lingering bidding
+			// labels on the first trick, or the prior winner's "won").
+			if round != nil && len(round.CurrentTrick()) == 0 {
+				g.clearActions()
 			}
 
 			coachCard := g.coachWould(func(s *engine.GameState) engine.Card {
@@ -791,7 +801,7 @@ func (g *GamePlay) handlePass() (tea.Model, tea.Cmd) {
 		g.message = err.Error()
 	} else {
 		g.message = "You passed"
-		g.pushEvent(g.message)
+		g.setAction(g.humanPlayer, "passes")
 		g.updateTableView()
 	}
 
@@ -818,7 +828,7 @@ func (g *GamePlay) handleAlone() (tea.Model, tea.Cmd) {
 			g.message = err.Error()
 		} else {
 			g.message = "Going alone!"
-			g.pushEvent("You're going alone!")
+			g.setAction(g.humanPlayer, "orders up, alone!")
 			g.updateTableView()
 		}
 	}
@@ -848,10 +858,11 @@ func (g *GamePlay) handleDefendAlone(declare bool) (tea.Model, tea.Cmd) {
 	} else {
 		if declare {
 			g.message = "You defend alone!"
+			g.setAction(g.humanPlayer, "defends alone!")
 		} else {
 			g.message = "You decline to defend alone"
+			g.setAction(g.humanPlayer, "no defense")
 		}
-		g.pushEvent(g.message)
 		g.updateTableView()
 	}
 
@@ -886,7 +897,7 @@ func (g *GamePlay) handleCallSuit(suit engine.Suit, alone bool) (tea.Model, tea.
 	}
 
 	g.message = fmt.Sprintf("You called %s!", suit)
-	g.pushEvent(g.message)
+	g.setAction(g.humanPlayer, "calls "+suit.Symbol())
 	g.suitSelector = nil // Reset suit selector
 	g.updateTableView()
 	return g, g.processAITurns()
@@ -923,22 +934,28 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 				return aiErrorMsg{err: err, player: current, action: "bid"}
 			}
 
-			// Build message about what AI decided
+			// Build message about what AI decided, and set the seat's short
+			// action label (shown under that seat's name).
 			playerName := g.tableView.PlayerNames[current]
 			var bidMsg string
 			if decision.Pass {
 				bidMsg = fmt.Sprintf("%s passes", playerName)
+				g.setAction(current, "passes")
 			} else if decision.OrderUp {
 				if decision.Alone {
 					bidMsg = fmt.Sprintf("%s orders it up alone!", playerName)
+					g.setAction(current, "orders up, alone!")
 				} else {
 					bidMsg = fmt.Sprintf("%s orders it up", playerName)
+					g.setAction(current, "orders up")
 				}
 			} else {
 				if decision.Alone {
 					bidMsg = fmt.Sprintf("%s calls %s alone!", playerName, decision.CallSuit)
+					g.setAction(current, "calls "+decision.CallSuit.Symbol()+", alone!")
 				} else {
 					bidMsg = fmt.Sprintf("%s calls %s", playerName, decision.CallSuit)
+					g.setAction(current, "calls "+decision.CallSuit.Symbol())
 				}
 			}
 			g.updateTableView()
@@ -951,6 +968,8 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 			if err := g.game.ApplyAction(action); err != nil {
 				return aiErrorMsg{err: err, player: current, action: "discard"}
 			}
+			// The dealer (current player here) just picked up the turn card.
+			g.setAction(current, "picks it up")
 
 		case engine.PhaseDefendAlone:
 			playerName := g.tableView.PlayerNames[current]
@@ -960,14 +979,14 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 					return aiErrorMsg{err: err, player: current, action: "defend-alone"}
 				}
 				g.message = fmt.Sprintf("%s defends alone!", playerName)
-				g.pushEvent(g.message)
+				g.setAction(current, "defends alone!")
 			} else {
 				action := engine.PassAction{PlayerIdx: current}
 				if err := g.game.ApplyAction(action); err != nil {
 					return aiErrorMsg{err: err, player: current, action: "defend-alone-pass"}
 				}
 				g.message = fmt.Sprintf("%s declines to defend alone", playerName)
-				g.pushEvent(g.message)
+				g.setAction(current, "no defense")
 			}
 
 		case engine.PhasePlay:
@@ -976,6 +995,12 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 			historyLen := 0
 			if round != nil {
 				historyLen = len(round.TrickHistory())
+			}
+
+			// Leading a new trick: clear stale seat labels (any lingering bidding
+			// labels on the first trick, or the prior winner's "won").
+			if round != nil && len(round.CurrentTrick()) == 0 {
+				g.clearActions()
 			}
 
 			card := aiPlayer.DecidePlay(state)
@@ -1084,20 +1109,21 @@ func (g *GamePlay) firstLegalCardIndex() int {
 	return 0
 }
 
-// pushEvent appends a player-facing event to the recent-events log shown in the
-// side panel, keeping only the most recent few. Empty/duplicate-of-last events
-// are ignored to avoid noise.
-func (g *GamePlay) pushEvent(msg string) {
-	const maxEvents = 10
-	if msg == "" {
+// setAction records a player's latest action so it shows on the reserved line
+// beneath that seat's name. Index is the player seat (0=You,1=West,2=Partner,
+// 3=East). Kept short so it fits under the seat label.
+func (g *GamePlay) setAction(player int, label string) {
+	if player < 0 || player >= len(g.playerAction) {
 		return
 	}
-	if n := len(g.eventLog); n > 0 && g.eventLog[n-1] == msg {
-		return
-	}
-	g.eventLog = append(g.eventLog, msg)
-	if len(g.eventLog) > maxEvents {
-		g.eventLog = g.eventLog[len(g.eventLog)-maxEvents:]
+	g.playerAction[player] = label
+}
+
+// clearActions blanks every seat's action label. Called at the start of a new
+// deal and when play begins so stale bidding labels don't linger.
+func (g *GamePlay) clearActions() {
+	for i := range g.playerAction {
+		g.playerAction[i] = ""
 	}
 }
 
@@ -1125,6 +1151,7 @@ func (g *GamePlay) updateTableView() {
 	g.tableView.MakerAlone = round.IsAlone()
 	g.tableView.TurnPulseFrame = g.turnPulseFrame
 	g.tableView.RoundNumber = len(g.game.RoundHistory()) + 1 // Current round = completed rounds + 1
+	g.tableView.PlayerActions = g.playerAction
 
 	// Update player hand counts
 	for i := 0; i < 4; i++ {
@@ -1190,6 +1217,7 @@ func (g *GamePlay) updateDealingView() {
 	g.tableView.CurrentTrick = nil
 	g.tableView.Trump = engine.NoSuit
 	g.tableView.TurnPulseFrame = g.turnPulseFrame
+	g.tableView.PlayerActions = g.playerAction
 
 	// Show the turned card only once every packet has been dealt.
 	if g.dealStep >= len(plan) {
@@ -1324,29 +1352,21 @@ func (g *GamePlay) View() string {
 	centeredHand := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, handStr)
 	centerContent := tableStr + centeredHand
 
-	// Compose the main area. The side cards are pure team scoreboards; global
-	// game state (round, trump, contract) goes in a banner above the table and
-	// the running play log goes in a ticker below it, so neither reads as
-	// belonging to one team. Compact layout folds the global state into a single
-	// scoreboard line instead of the banner/cards.
+	// Compose the main area. The side cards are pure team scoreboards flanking
+	// the table: YOU on the left, OPP on the right. Global game state (round,
+	// trump, contract) goes in a banner above the table, and each player's latest
+	// action shows under their seat. Compact layout folds the scores into a single
+	// scoreboard line instead of the flanking cards.
 	var mainArea string
 	if showPanels {
 		centerHeight := lipgloss.Height(centerContent)
-		// Left column: the Recent log box alone, filling the full table height.
-		// Right column: the YOU card on top and the OPP card below it, both
-		// horizontally centered within the (wider) side-column width and padded to
-		// the table height. Both columns are sideColumnWidth wide, so centerContent
-		// stays screen-centered between them. (Width math: the table is 61 wide and
-		// each side column is sideColumnWidth, so the full layout needs
-		// 61 + 2*sideColumnWidth + screen-border margin — see fullLayoutMinWidth.)
-		leftColumn := g.renderRecentLogBox(centerHeight)
+		// Flank the table: YOU card on the left, OPP card on the right, each
+		// filled to the table height so the table stays vertically centered
+		// between them. Each panel is 13 wide (panelInnerWidth + border).
+		leftPanel := lipgloss.PlaceVertical(centerHeight, lipgloss.Top, g.renderYouCard())
+		rightPanel := lipgloss.PlaceVertical(centerHeight, lipgloss.Top, g.renderOppCard())
 
-		youCard := lipgloss.PlaceHorizontal(sideColumnWidth, lipgloss.Center, g.renderYouCard())
-		oppCard := lipgloss.PlaceHorizontal(sideColumnWidth, lipgloss.Center, g.renderOppCard())
-		stacked := lipgloss.JoinVertical(lipgloss.Center, youCard, oppCard)
-		rightColumn := lipgloss.PlaceVertical(centerHeight, lipgloss.Top, stacked)
-
-		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, centerContent, rightColumn)
+		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, centerContent, rightPanel)
 	} else {
 		scoreBar := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, g.renderScoreBar())
 		mainArea = lipgloss.JoinVertical(lipgloss.Center, scoreBar, centerContent)
@@ -1370,19 +1390,18 @@ func (g *GamePlay) View() string {
 			Render(s)
 	}
 
-	// Assemble vertical sections: [banner] · main area · ticker · status ·
-	// [coach] · help. Optional regions still reserve their rows when empty so
-	// that their first appearance doesn't push the table down.
+	// Assemble vertical sections: [banner] · main area · status · [coach] · help.
+	// Optional regions still reserve their rows when empty so that their first
+	// appearance doesn't push the table down. Per-player actions now live under
+	// each seat in the table, so there is no separate play-log region.
 	var sections []string
 	if showPanels {
-		// Banner row + spacer below it. The play log lives in the left-column box
-		// in this layout, so no horizontal ticker row here.
+		// Banner row + spacer below it.
 		sections = append(sections, slot(g.renderContractBanner(contentWidth), 2))
 		sections = append(sections, mainArea)
 	} else {
-		// Compact layout keeps the horizontal ticker under the table.
+		// Compact layout: a single score bar above the table (added below).
 		sections = append(sections, mainArea)
-		sections = append(sections, slot(g.renderRecentTicker(contentWidth), 1))
 	}
 	// Pre-truncate the status to a single line so a long combined message can't
 	// wrap and grow the slot vertically (which would shove the block up/down).
@@ -1392,7 +1411,6 @@ func (g *GamePlay) View() string {
 	if g.tutorial {
 		sections = append(sections, slot(g.renderCoachBox(contentWidth), coachBoxHeight))
 	}
-	sections = append(sections, slot(theme.Current.Help.Render(helpStr), 1))
 
 	innerContent := lipgloss.JoinVertical(lipgloss.Center, sections...)
 
@@ -1401,8 +1419,14 @@ func (g *GamePlay) View() string {
 		innerContent = g.addCelebrationEffect(innerContent)
 	}
 
-	// Center content and wrap in screen border
-	centeredContent := lipgloss.Place(width-4, height-4, lipgloss.Center, lipgloss.Center, innerContent)
+	// Pin the controls/help as a footer on the very bottom row (mirroring the
+	// banner header at the top), and center the rest of the content in the space
+	// above it. footer spans the full content width so it reads as a bottom bar.
+	footer := lipgloss.NewStyle().Width(width - 4).Align(lipgloss.Center).
+		Render(theme.Current.Help.Render(helpStr))
+	footerHeight := lipgloss.Height(footer)
+	body := lipgloss.Place(width-4, height-4-footerHeight, lipgloss.Center, lipgloss.Center, innerContent)
+	centeredContent := body + "\n" + footer
 
 	// Gold border during celebration
 	var screenBox string
@@ -1639,9 +1663,8 @@ func (g *GamePlay) getHelpText() string {
 	}
 }
 
-// renderYouCard renders the YOU scoreboard card at its NATURAL height (no
-// vertical fill) so it can sit at the top of the stacked left column with the
-// recent-log box filling the remaining height beneath it.
+// renderYouCard renders the YOU scoreboard card at its NATURAL height; View()
+// fills it to the table height so it flanks the left side of the table.
 func (g *GamePlay) renderYouCard() string {
 	scores := g.game.Scores()
 	var yourTricks int
@@ -1665,63 +1688,6 @@ func (g *GamePlay) renderYouCard() string {
 	return boxFrame("YOU", theme.ColGreen, lipgloss.JoinVertical(lipgloss.Center, body...), panelInnerWidth)
 }
 
-// renderRecentLogBox renders the recent play-log as a bordered vertical box that
-// fills the whole left column (the given height). Each event is delimited with a
-// leading dim bullet on its first line and a 2-space hanging indent on wrapped
-// continuation lines, so a multi-line event reads as one visually grouped block
-// with no blank rows between its lines. Body rows = available height minus the
-// frame; entries are kept newest-at-bottom and padded with blanks so the box is
-// a CONSTANT height regardless of event count (essential for layout stability).
-// Returns "" if height can't fit a title + border + at least one body row.
-func (g *GamePlay) renderRecentLogBox(height int) string {
-	if height < 4 {
-		return ""
-	}
-
-	// Body rows available inside the frame: title bar (1) + top/bottom border (2).
-	bodyLines := height - 3
-	if bodyLines < 1 {
-		bodyLines = 1
-	}
-
-	muted := theme.Current.Muted
-	const bullet = "• "
-	const indent = "  " // hanging indent for wrapped continuation lines
-
-	// Wrap each event to the inner width minus the bullet/indent gutter, then
-	// prefix the first line with the dim bullet and continuation lines with the
-	// matching indent so the lines of one entry are grouped unambiguously.
-	wrap := lipgloss.NewStyle().Width(logBoxInnerWidth - len([]rune(bullet)))
-
-	var lines []string
-	for _, e := range g.eventLog {
-		wrapped := strings.Split(wrap.Render(e), "\n")
-		for i, w := range wrapped {
-			prefix := indent
-			if i == 0 {
-				prefix = bullet
-			}
-			lines = append(lines, muted.Render(prefix)+muted.Render(w))
-		}
-	}
-
-	// Keep only the last bodyLines visual rows, then pad up to exactly that many
-	// so the box never changes height.
-	if len(lines) > bodyLines {
-		lines = lines[len(lines)-bodyLines:]
-	}
-	for len(lines) < bodyLines {
-		lines = append(lines, "")
-	}
-
-	body := lipgloss.NewStyle().
-		Width(logBoxInnerWidth).
-		Height(bodyLines).
-		Render(strings.Join(lines, "\n"))
-
-	return boxFrame("Recent", theme.ColBlue, body, logBoxInnerWidth)
-}
-
 // Layout sizing. panelInnerWidth is the content width inside each side-panel box
 // (outer = 13 incl. the rounded border). The min/full thresholds decide between
 // the too-small guard, the compact (panel-less) layout, and the full HUD layout.
@@ -1730,18 +1696,11 @@ const (
 	minPlayableWidth  = 64 // table (~61 wide) + screen-border margin
 	minPlayableHeight = 20 // enough rows for the table core
 
-	// sideColumnWidth is the outer width of BOTH side columns of the full layout
-	// (the Recent box on the left, the stacked YOU/OPP cards on the right). The
-	// two columns must be equal width so the table stays screen-centered between
-	// them. It is wider than the 13-wide scoreboards so the Recent box is roomy;
-	// the scoreboards keep their 13 width and are centered within this column.
-	sideColumnWidth  = 19                  // outer width of each side column
-	logBoxInnerWidth = sideColumnWidth - 2 // content width inside the Recent box (border = 2)
-
 	// fullLayoutMinWidth gates the full HUD vs the compact fallback. It must clear
-	// table (61) + both side columns (sideColumnWidth each) + the screen-border
-	// margin (2); below it we drop to the compact score-bar layout.
-	fullLayoutMinWidth = 61 + 2*sideColumnWidth + 2 // table + both side columns + screen border
+	// the table (~61) + both flanking scoreboard panels (13 each incl. border) +
+	// the screen-border margin (2); below it we drop to the compact score-bar
+	// layout. (= 89.)
+	fullLayoutMinWidth = 61 + 2*13 + 2 // table + both flanking panels + screen border
 
 	// shuffleArtWidth is a constant width the shuffle title and deck art are
 	// centered within so the animation doesn't jitter as their widths change
@@ -1757,8 +1716,7 @@ const (
 
 // boxFrame wraps inner content in the shared panel frame: a centered, bold,
 // colored title bar atop a rounded border, at the given inner content width.
-// Used by the YOU/OPP scoreboard cards (at panelInnerWidth) and the recent-log
-// box (at logBoxInnerWidth) so each box controls its own width.
+// Used by the YOU/OPP scoreboard cards (at panelInnerWidth).
 func boxFrame(title string, accent lipgloss.TerminalColor, inner string, innerWidth int) string {
 	header := lipgloss.NewStyle().
 		Width(innerWidth).
@@ -1807,8 +1765,8 @@ func panelTricks(n int, accent lipgloss.TerminalColor) string {
 }
 
 // renderOppCard renders the opponents' scoreboard card (score + tricks) at its
-// NATURAL height, mirroring renderYouCard, so it can stack beneath the YOU card
-// in the right column. Global state lives in the banner.
+// NATURAL height, mirroring renderYouCard; View() fills it to the table height
+// so it flanks the right side of the table. Global state lives in the banner.
 func (g *GamePlay) renderOppCard() string {
 	scores := g.game.Scores()
 	var oppTricks int
@@ -1872,27 +1830,6 @@ func (g *GamePlay) renderContractBanner(maxWidth int) string {
 	}
 
 	return lipgloss.NewStyle().MaxWidth(maxWidth).Render(strings.Join(parts, sep))
-}
-
-// renderRecentTicker builds the centered global play log shown below the table:
-// the last few events as a single horizontal line. Truncated to maxWidth so it
-// can never overflow. Returns "" when there are no events yet.
-func (g *GamePlay) renderRecentTicker(maxWidth int) string {
-	if len(g.eventLog) == 0 {
-		return ""
-	}
-	const showN = 3
-	events := g.eventLog
-	if len(events) > showN {
-		events = events[len(events)-showN:]
-	}
-	styled := make([]string, len(events))
-	for i, e := range events {
-		styled[i] = theme.Current.Muted.Render(e)
-	}
-	label := theme.Current.Muted.Bold(true).Render("Recent  ")
-	line := label + strings.Join(styled, theme.Current.Muted.Render("  ·  "))
-	return lipgloss.NewStyle().MaxWidth(maxWidth).Render(line)
 }
 
 // renderScoreBar builds the single-line scoreboard shown above the table in the

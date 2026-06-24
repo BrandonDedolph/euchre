@@ -37,10 +37,11 @@ type TableView struct {
 	CurrentPlayer  int
 	PlayerNames    []string
 	TricksWon      []int
-	Maker          int  // Player who called trump (-1 if none)
-	MakerAlone     bool // Whether maker is going alone
-	TurnPulseFrame int  // Animation frame for turn indicator pulse
-	RoundNumber    int  // Current round number (1-based)
+	Maker          int       // Player who called trump (-1 if none)
+	MakerAlone     bool      // Whether maker is going alone
+	TurnPulseFrame int       // Animation frame for turn indicator pulse
+	RoundNumber    int       // Current round number (1-based)
+	PlayerActions  [4]string // Latest per-seat action label (e.g. "passes"); "" = none
 
 	// Animation states
 	CardPlayAnim     *CardPlayAnim     // Card being played animation
@@ -108,19 +109,23 @@ func (t *TableView) renderTopPlayer() string {
 	header := fmt.Sprintf("%s%s %s%s", name, indicator, tricksStr, dealerBadge)
 	header = lipgloss.PlaceHorizontal(t.Width, lipgloss.Center, header)
 
+	// Reserved action line directly under the name (always present, blank when
+	// no action, so the seat's fixed height never changes).
+	actionLine := lipgloss.PlaceHorizontal(t.Width, lipgloss.Center, renderActionLabel(t.PlayerActions[2], t.Width))
+
 	// Show face-down cards (always show space for 5 cards even if fewer)
 	cardDisplay := RenderFaceDown(min(cards, 5))
 	cardDisplay = lipgloss.PlaceHorizontal(t.Width, lipgloss.Center, cardDisplay)
 
-	content := header + "\n" + cardDisplay
+	content := header + "\n" + actionLine + "\n" + cardDisplay
 
-	// Fixed height to prevent layout shift
-	return lipgloss.NewStyle().Height(7).Render(content)
+	// Fixed height to prevent layout shift (header + action + 5-card block).
+	return lipgloss.NewStyle().Height(8).Render(content)
 }
 
 // renderMiddle renders the middle section with left player, trick, right player
 func (t *TableView) renderMiddle() string {
-	leftPlayer := t.renderSidePlayer(1, true)   // West
+	leftPlayer := t.renderSidePlayer(1, true) // West
 	trickArea := t.renderTrickArea()
 	rightPlayer := t.renderSidePlayer(3, false) // East
 
@@ -166,10 +171,15 @@ func (t *TableView) renderSidePlayer(playerIdx int, isLeft bool) string {
 	sb.WriteString(" ")
 	sb.WriteString(tricksStr)
 	sb.WriteString("\n")
+	// Reserved action line directly under the name (always present, blank when
+	// no action, so the seat's fixed height never changes). Width 14 matches the
+	// seat box; truncate so a long label can't widen the seat.
+	sb.WriteString(renderActionLabel(t.PlayerActions[playerIdx], 14))
+	sb.WriteString("\n")
 	sb.WriteString(cardDisplay)
 
 	// Fixed width and height to prevent layout shift
-	style := lipgloss.NewStyle().Width(14).Height(12)
+	style := lipgloss.NewStyle().Width(14).Height(13)
 	if isLeft {
 		style = style.Align(lipgloss.Right)
 	} else {
@@ -181,8 +191,8 @@ func (t *TableView) renderSidePlayer(playerIdx int, isLeft bool) string {
 
 // renderTrickArea renders the center area with played cards
 func (t *TableView) renderTrickArea() string {
-	cardWidth := 7  // Card width
-	cardHeight := 5 // Card height
+	cardWidth := 7                // Card width
+	cardHeight := 5               // Card height
 	totalWidth := cardWidth*3 + 4 // 3 cards + spacing
 
 	// During bidding, show the turned card in the center
@@ -321,6 +331,17 @@ func (t *TableView) renderTrickArea() string {
 		Padding(0, 1)
 
 	return style.Render(content)
+}
+
+// renderActionLabel renders a seat's latest action on a reserved line beneath
+// its name. The line is ALWAYS present (a single space when action is empty) so
+// the seat's fixed height never changes. The text is styled muted/dim and
+// truncated to maxWidth so a long label can't widen the seat.
+func renderActionLabel(action string, maxWidth int) string {
+	if action == "" {
+		return " "
+	}
+	return theme.Current.Muted.MaxWidth(maxWidth).Render(action)
 }
 
 // min returns the minimum of two integers

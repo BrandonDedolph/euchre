@@ -71,44 +71,35 @@ func assertAnchorsStable(t *testing.T, g *GamePlay, anchors []string, mutate map
 	}
 }
 
-// fullLayoutWidth is wide enough to clear fullLayoutMinWidth so the full HUD
-// (Recent box on the left, stacked YOU/OPP cards on the right) renders. The
-// columns are now wider than before, so the old 100-col width would fall back to
-// the compact layout — these tests use a width that matches the real terminal.
-const fullLayoutWidth = 110
+// fullLayoutWidth is wide enough to clear fullLayoutMinWidth (~89) so the full
+// HUD (YOU card flanking the left, OPP card flanking the right) renders.
+const fullLayoutWidth = 100
 
 func TestGamePlayLayoutStable(t *testing.T) {
 	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 
-	// "Recent" is the left-column log box title; "YOU"/"OPP" are now the stacked
-	// scoreboard cards on the RIGHT. All must stay pinned across every event-count
-	// and message-length change.
-	anchors := []string{"Partner", "YOU", "OPP", "Recent"}
+	// "YOU"/"OPP" are the scoreboard cards flanking the table; "Partner" anchors
+	// the table itself. All must stay pinned across every per-seat action and
+	// message-length change.
+	anchors := []string{"Partner", "YOU", "OPP"}
+
+	setActions := func(a [4]string) func() {
+		return func() {
+			g.playerAction = a
+			g.updateTableView()
+		}
+	}
 
 	assertAnchorsStable(t, g, anchors, map[string]func(){
-		"empty log": func() {
-			g.eventLog = nil
-		},
-		"one event": func() {
-			g.eventLog = []string{"You played 9♠"}
-		},
-		"two events": func() {
-			g.eventLog = []string{"You played 9♠", "West played K♠"}
-		},
-		"overflowing log": func() {
-			g.eventLog = []string{
-				"e1", "e2", "e3", "e4", "e5", "e6",
-				"e7", "e8", "e9", "e10", "e11", "e12", "e13", "e14",
-			}
-		},
-		"one very long event": func() {
-			g.eventLog = []string{
-				"West ordered up the right bower and led it into your partner's void",
-			}
-		},
-		"wide glyph events": func() {
-			g.eventLog = []string{"You played 9♠", "West trumped ♥♣♦", "Partner led A♠"}
-		},
+		"no actions":    setActions([4]string{}),
+		"one action":    setActions([4]string{"", "passes", "", ""}),
+		"all seats act": setActions([4]string{"orders up", "passes", "passes", "calls ♠"}),
+		"long action labels": setActions([4]string{
+			"orders up, alone!",
+			"this is an extremely long action label that should be truncated",
+			"defends alone!",
+			"calls ♠, alone!",
+		}),
 		"long wrapping status message": func() {
 			g.message = "West ordered up the jack of spades and is going alone, " +
 				"so you will need to defend carefully against a strong lone hand here"
@@ -116,66 +107,53 @@ func TestGamePlayLayoutStable(t *testing.T) {
 		"short status message": func() {
 			g.message = "Your turn"
 		},
-		"no log again": func() {
-			g.eventLog = nil
-		},
+		"actions cleared again": setActions([4]string{}),
 	})
 }
 
-// TestGamePlayLogBulletGrouping verifies each Recent entry is delimited with a
-// leading bullet on its first line (so multi-line entries are unambiguous), and
-// that the box stays a constant height as entries are added — the whole point of
-// the delimiter is grouping without disturbing layout stability.
-func TestGamePlayLogBulletGrouping(t *testing.T) {
+// TestGamePlaySeatActionsStable verifies the reserved per-seat action line keeps
+// the table anchors at constant (row,col) and the total view height constant as
+// action labels appear, change length, and clear — i.e. the line is always
+// reserved and never shifts the layout. It also asserts an action string
+// actually appears next to its seat in the rendered view.
+func TestGamePlaySeatActionsStable(t *testing.T) {
 	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 
-	g.eventLog = []string{"You played 9♠"}
-	one := g.View()
-	if !strings.Contains(one, "• You played 9♠") {
-		t.Errorf("expected a bullet-prefixed entry in the Recent box, view was:\n%s", one)
+	setActions := func(a [4]string) func() {
+		return func() {
+			g.playerAction = a
+			g.updateTableView()
+		}
 	}
-	oneHeight := lipgloss.Height(one)
 
-	// A multi-line entry must still start with a single bullet and keep the box
-	// (and thus the whole view) the same height.
-	g.eventLog = []string{
-		"You played 9♠",
-		"West ordered up the right bower and led it into your partner's void",
-		"Partner led A♠",
+	assertAnchorsStable(t, g, []string{"Partner", "YOU", "OPP"}, map[string]func(){
+		"west passes":          setActions([4]string{"", "passes", "", ""}),
+		"very long west label": setActions([4]string{"", strings.Repeat("verylong ", 8), "", ""}),
+		"empty":                setActions([4]string{}),
+	})
+
+	// The action label should actually render near its seat. "West (0)" is the
+	// West seat label; "passes" must appear on the line directly below it.
+	g.playerAction = [4]string{"", "passes", "", ""}
+	g.updateTableView()
+	view := g.View()
+	westRow := rowOf(view, "West")
+	if westRow < 0 {
+		t.Fatal("West seat label not found")
 	}
-	many := g.View()
-	bullets := strings.Count(many, "• ")
-	if bullets < 3 {
-		t.Errorf("expected at least 3 bullet markers (one per entry), got %d", bullets)
+	passesRow := rowOf(view, "passes")
+	if passesRow < 0 {
+		t.Fatal("expected 'passes' action label to appear in the view")
 	}
-	if got := lipgloss.Height(many); got != oneHeight {
-		t.Errorf("view height changed with more/multi-line entries: one=%d many=%d", oneHeight, got)
-	}
-}
-
-// TestGamePlayLogBoxConstantHeight verifies the recent-log box keeps the whole
-// view the same height whether the log is empty or full, so it never shoves the
-// rest of the layout vertically.
-func TestGamePlayLogBoxConstantHeight(t *testing.T) {
-	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
-
-	g.eventLog = nil
-	empty := lipgloss.Height(g.View())
-
-	g.eventLog = []string{
-		"e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12",
-	}
-	full := lipgloss.Height(g.View())
-
-	if empty != full {
-		t.Errorf("view height changed with log content: empty=%d full=%d", empty, full)
+	if passesRow != westRow+1 {
+		t.Errorf("expected 'passes' directly under West (row %d), got row %d", westRow+1, passesRow)
 	}
 }
 
 func TestGamePlayTutorialCoachLayoutStable(t *testing.T) {
 	g := renderableGamePlay(t, true, fullLayoutWidth, 40)
 
-	assertAnchorsStable(t, g, []string{"Partner", "YOU", "OPP", "Recent"}, map[string]func(){
+	assertAnchorsStable(t, g, []string{"Partner", "YOU", "OPP"}, map[string]func(){
 		"short coach tip": func() {
 			g.message = "Pick a card"
 			g.gradeMsg = "Good."
@@ -185,8 +163,9 @@ func TestGamePlayTutorialCoachLayoutStable(t *testing.T) {
 			g.gradeMsg = "Leading your off-ace here is risky because the opponents " +
 				"are void in that suit and can trump it, costing you a likely trick."
 		},
-		"ticker plus coach": func() {
-			g.eventLog = []string{"You played 9♠", "West trumped with J♣"}
+		"seat actions plus coach": func() {
+			g.playerAction = [4]string{"orders up", "passes", "", "calls ♥"}
+			g.updateTableView()
 		},
 	})
 }
@@ -197,8 +176,9 @@ func TestGamePlayCompactLayoutStable(t *testing.T) {
 	g := renderableGamePlay(t, false, 70, 40)
 
 	assertAnchorsStable(t, g, []string{"Partner", "YOU", "OPP"}, map[string]func(){
-		"ticker appears": func() {
-			g.eventLog = []string{"You played 9♠", "West played K♠"}
+		"seat actions appear": func() {
+			g.playerAction = [4]string{"", "passes", "orders up", ""}
+			g.updateTableView()
 		},
 		"long status message": func() {
 			g.message = "West ordered up and is going alone so defend carefully now"
@@ -211,7 +191,7 @@ func TestGamePlayCompactLayoutStable(t *testing.T) {
 // height stays constant as the message length changes.
 func TestGamePlayStatusCentered(t *testing.T) {
 	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
-	anchors := []string{"Partner", "YOU", "OPP", "Recent"}
+	anchors := []string{"Partner", "YOU", "OPP"}
 
 	g.message = "Zalpha turn now"
 	base := g.View()
