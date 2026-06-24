@@ -1088,7 +1088,7 @@ func (g *GamePlay) firstLegalCardIndex() int {
 // side panel, keeping only the most recent few. Empty/duplicate-of-last events
 // are ignored to avoid noise.
 func (g *GamePlay) pushEvent(msg string) {
-	const maxEvents = 4
+	const maxEvents = 10
 	if msg == "" {
 		return
 	}
@@ -1332,9 +1332,14 @@ func (g *GamePlay) View() string {
 	var mainArea string
 	if showPanels {
 		centerHeight := lipgloss.Height(centerContent)
-		leftPanel := g.renderLeftPanel(centerHeight)
+		// Left column: the YOU scoreboard card at its natural height with the
+		// recent-log box filling the remainder, so the column total equals the
+		// table height and OPP (top-aligned at centerHeight) stays in line.
+		youCard := g.renderYouCard()
+		logBox := g.renderRecentLogBox(centerHeight - lipgloss.Height(youCard))
+		leftColumn := lipgloss.JoinVertical(lipgloss.Left, youCard, logBox)
 		rightPanel := g.renderRightPanel(centerHeight)
-		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, centerContent, rightPanel)
+		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, centerContent, rightPanel)
 	} else {
 		scoreBar := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, g.renderScoreBar())
 		mainArea = lipgloss.JoinVertical(lipgloss.Center, scoreBar, centerContent)
@@ -1353,7 +1358,21 @@ func (g *GamePlay) View() string {
 		return lipgloss.NewStyle().
 			Width(contentWidth).
 			Height(h).
+			MaxHeight(h).
 			Align(lipgloss.Center).
+			Render(s)
+	}
+
+	// slotLeft is slot but left-aligned: the text grows rightward from a fixed
+	// left margin instead of re-centering (which would slide its left edge as the
+	// message length changes). MaxHeight caps vertical growth so a long message
+	// can't push the whole block down.
+	slotLeft := func(s string, h int) string {
+		return lipgloss.NewStyle().
+			Width(contentWidth).
+			Height(h).
+			MaxHeight(h).
+			Align(lipgloss.Left).
 			Render(s)
 	}
 
@@ -1362,16 +1381,23 @@ func (g *GamePlay) View() string {
 	// that their first appearance doesn't push the table down.
 	var sections []string
 	if showPanels {
-		// Banner row + spacer below it.
+		// Banner row + spacer below it. The play log lives in the left-column box
+		// in this layout, so no horizontal ticker row here.
 		sections = append(sections, slot(g.renderContractBanner(contentWidth), 2))
+		sections = append(sections, mainArea)
+	} else {
+		// Compact layout keeps the horizontal ticker under the table.
+		sections = append(sections, mainArea)
+		sections = append(sections, slot(g.renderRecentTicker(contentWidth), 1))
 	}
-	sections = append(sections, mainArea)
-	sections = append(sections, slot(g.renderRecentTicker(contentWidth), 1))
-	sections = append(sections, slot(theme.Current.Accent.Render(phaseStr), 2))
+	// Pre-truncate the status to a single line so a long combined message can't
+	// wrap and grow the slot vertically (which would shove the block up/down).
+	statusLine := lipgloss.NewStyle().MaxWidth(contentWidth).Render(theme.Current.Accent.Render(phaseStr))
+	sections = append(sections, slotLeft(statusLine, 2))
 	if g.tutorial {
 		sections = append(sections, slot(g.renderCoachBox(contentWidth), coachBoxHeight))
 	}
-	sections = append(sections, slot(theme.Current.Help.Render(helpStr), 1))
+	sections = append(sections, slotLeft(theme.Current.Help.Render(helpStr), 1))
 
 	innerContent := lipgloss.JoinVertical(lipgloss.Center, sections...)
 
@@ -1618,10 +1644,10 @@ func (g *GamePlay) getHelpText() string {
 	}
 }
 
-// renderLeftPanel renders your team's scoreboard card (score + tricks). Global
-// state (round, trump, contract, log) lives in the banner/ticker, not here, so
-// the card reads purely as your team's standing.
-func (g *GamePlay) renderLeftPanel(height int) string {
+// renderYouCard renders the YOU scoreboard card at its NATURAL height (no
+// vertical fill) so it can sit at the top of the stacked left column with the
+// recent-log box filling the remaining height beneath it.
+func (g *GamePlay) renderYouCard() string {
 	scores := g.game.Scores()
 	var yourTricks int
 	if r := g.game.Round(); r != nil {
@@ -1642,7 +1668,51 @@ func (g *GamePlay) renderLeftPanel(height int) string {
 		panelTrickDots(yourTricks, theme.ColGreen),
 	}
 
-	return panelBox("YOU", theme.ColGreen, body, height)
+	return boxFrame("YOU", theme.ColGreen, lipgloss.JoinVertical(lipgloss.Center, body...))
+}
+
+// renderRecentLogBox renders the recent play-log as a bordered vertical box that
+// fills the given height beneath the YOU card in the left column. The body holds
+// a constant logBoxBodyLines rows (padded when there are fewer events) so the
+// box is a constant height regardless of event count. Returns "" if height can't
+// fit a title + border + at least one body row.
+func (g *GamePlay) renderRecentLogBox(height int) string {
+	if height < 4 {
+		return ""
+	}
+
+	muted := theme.Current.Muted
+	wrap := lipgloss.NewStyle().Width(panelInnerWidth)
+
+	// Build wrapped body lines, newest at the bottom, clipping any single event
+	// to at most 2 visual lines.
+	var lines []string
+	for _, e := range g.eventLog {
+		rendered := wrap.Render(muted.Render(e))
+		evLines := strings.Split(rendered, "\n")
+		if len(evLines) > 2 {
+			evLines = evLines[:2]
+			evLines[1] += "…"
+		}
+		lines = append(lines, evLines...)
+	}
+
+	// Keep only the last logBoxBodyLines visual rows, then pad up to exactly that
+	// many so the box never changes height.
+	if len(lines) > logBoxBodyLines {
+		lines = lines[len(lines)-logBoxBodyLines:]
+	}
+	for len(lines) < logBoxBodyLines {
+		lines = append(lines, "")
+	}
+
+	body := lipgloss.NewStyle().
+		Width(panelInnerWidth).
+		Height(logBoxBodyLines).
+		Render(strings.Join(lines, "\n"))
+
+	box := boxFrame("Recent", theme.ColBlue, body)
+	return lipgloss.PlaceVertical(height, lipgloss.Top, box)
 }
 
 // Layout sizing. panelInnerWidth is the content width inside each side-panel box
@@ -1664,12 +1734,29 @@ const (
 	// stays a constant size between tips.
 	coachBoxBodyLines = 4
 	coachBoxHeight    = coachBoxBodyLines + 3
+
+	// logBoxBodyLines is the reserved height of the recent-log box's body; the
+	// box renders at a constant height regardless of how many events exist so the
+	// left column always equals the table height and nothing shifts.
+	logBoxBodyLines = 12
 )
 
 // panelBox wraps a panel's body in a rounded border with a colored title bar,
 // then centers it vertically in the given column height so it reads as a
 // self-contained card rather than a full-height divider.
 func panelBox(title string, accent lipgloss.TerminalColor, body []string, height int) string {
+	box := boxFrame(title, accent, lipgloss.JoinVertical(lipgloss.Center, body...))
+
+	// Top-align both panels so their title bars line up; pad below to fill the
+	// column height beside the table.
+	return lipgloss.PlaceVertical(height, lipgloss.Top, box)
+}
+
+// boxFrame wraps inner content in the shared panel frame: a centered, bold,
+// colored title bar atop a rounded border, all at panelInnerWidth. Used by both
+// panelBox (the scoreboards) and the recent-log box so the left column stays one
+// constant width.
+func boxFrame(title string, accent lipgloss.TerminalColor, inner string) string {
 	header := lipgloss.NewStyle().
 		Width(panelInnerWidth).
 		Align(lipgloss.Center).
@@ -1678,16 +1765,12 @@ func panelBox(title string, accent lipgloss.TerminalColor, body []string, height
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Render(title)
 
-	inner := lipgloss.JoinVertical(lipgloss.Center, append([]string{header}, body...)...)
-	box := lipgloss.NewStyle().
+	content := lipgloss.JoinVertical(lipgloss.Center, header, inner)
+	return lipgloss.NewStyle().
 		Width(panelInnerWidth).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColBlue).
-		Render(inner)
-
-	// Top-align both panels so their title bars line up; pad below to fill the
-	// column height beside the table.
-	return lipgloss.PlaceVertical(height, lipgloss.Top, box)
+		Render(content)
 }
 
 // panelCenter renders s centered to the panel inner width using the given style.

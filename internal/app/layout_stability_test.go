@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // pos is the row/column of a marker within a rendered view.
@@ -41,11 +42,11 @@ func renderableGamePlay(t *testing.T, tutorial bool, w, h int) *GamePlay {
 // assertAnchorsStable renders the view in each state and checks that the table
 // and side panels occupy the exact same rows every time — i.e. nothing that is
 // meant to be fixed in place jumps when variable content changes.
-func assertAnchorsStable(t *testing.T, g *GamePlay, mutate map[string]func()) {
+func assertAnchorsStable(t *testing.T, g *GamePlay, anchors []string, mutate map[string]func()) {
 	t.Helper()
-	anchors := []string{"Partner", "YOU", "OPP"}
 
 	base := g.View()
+	baseHeight := lipgloss.Height(base)
 	want := map[string]pos{}
 	for _, a := range anchors {
 		p := posOf(base, a)
@@ -63,15 +64,42 @@ func assertAnchorsStable(t *testing.T, g *GamePlay, mutate map[string]func()) {
 				t.Errorf("state %q: anchor %q moved from %+v to %+v", name, a, want[a], got)
 			}
 		}
+		if got := lipgloss.Height(view); got != baseHeight {
+			t.Errorf("state %q: total view height changed from %d to %d", name, baseHeight, got)
+		}
 	}
 }
 
 func TestGamePlayLayoutStable(t *testing.T) {
 	g := renderableGamePlay(t, false, 100, 40)
 
-	assertAnchorsStable(t, g, map[string]func(){
-		"recent ticker appears": func() {
-			g.eventLog = []string{"You played 9♠", "West played K♠", "Partner played A♠"}
+	// "Recent" is the left-column log box title; it must stay pinned across every
+	// event-count and message-length change just like the scoreboards.
+	anchors := []string{"Partner", "YOU", "OPP", "Recent"}
+
+	assertAnchorsStable(t, g, anchors, map[string]func(){
+		"empty log": func() {
+			g.eventLog = nil
+		},
+		"one event": func() {
+			g.eventLog = []string{"You played 9♠"}
+		},
+		"two events": func() {
+			g.eventLog = []string{"You played 9♠", "West played K♠"}
+		},
+		"overflowing log": func() {
+			g.eventLog = []string{
+				"e1", "e2", "e3", "e4", "e5", "e6",
+				"e7", "e8", "e9", "e10", "e11", "e12", "e13", "e14",
+			}
+		},
+		"one very long event": func() {
+			g.eventLog = []string{
+				"West ordered up the right bower and led it into your partner's void",
+			}
+		},
+		"wide glyph events": func() {
+			g.eventLog = []string{"You played 9♠", "West trumped ♥♣♦", "Partner led A♠"}
 		},
 		"long wrapping status message": func() {
 			g.message = "West ordered up the jack of spades and is going alone, " +
@@ -80,16 +108,35 @@ func TestGamePlayLayoutStable(t *testing.T) {
 		"short status message": func() {
 			g.message = "Your turn"
 		},
-		"no ticker again": func() {
+		"no log again": func() {
 			g.eventLog = nil
 		},
 	})
 }
 
+// TestGamePlayLogBoxConstantHeight verifies the recent-log box keeps the whole
+// view the same height whether the log is empty or full, so it never shoves the
+// rest of the layout vertically.
+func TestGamePlayLogBoxConstantHeight(t *testing.T) {
+	g := renderableGamePlay(t, false, 100, 40)
+
+	g.eventLog = nil
+	empty := lipgloss.Height(g.View())
+
+	g.eventLog = []string{
+		"e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12",
+	}
+	full := lipgloss.Height(g.View())
+
+	if empty != full {
+		t.Errorf("view height changed with log content: empty=%d full=%d", empty, full)
+	}
+}
+
 func TestGamePlayTutorialCoachLayoutStable(t *testing.T) {
 	g := renderableGamePlay(t, true, 100, 40)
 
-	assertAnchorsStable(t, g, map[string]func(){
+	assertAnchorsStable(t, g, []string{"Partner", "YOU", "OPP", "Recent"}, map[string]func(){
 		"short coach tip": func() {
 			g.message = "Pick a card"
 			g.gradeMsg = "Good."
@@ -110,7 +157,7 @@ func TestGamePlayTutorialCoachLayoutStable(t *testing.T) {
 func TestGamePlayCompactLayoutStable(t *testing.T) {
 	g := renderableGamePlay(t, false, 70, 40)
 
-	assertAnchorsStable(t, g, map[string]func(){
+	assertAnchorsStable(t, g, []string{"Partner", "YOU", "OPP"}, map[string]func(){
 		"ticker appears": func() {
 			g.eventLog = []string{"You played 9♠", "West played K♠"}
 		},
@@ -118,6 +165,43 @@ func TestGamePlayCompactLayoutStable(t *testing.T) {
 			g.message = "West ordered up and is going alone so defend carefully now"
 		},
 	})
+}
+
+// TestGamePlayStatusLeftPinned verifies the now left-aligned status line keeps
+// its left edge fixed as the message length changes (instead of re-centering and
+// sliding), and that anchors stay put across phase/message changes.
+func TestGamePlayStatusLeftPinned(t *testing.T) {
+	g := renderableGamePlay(t, false, 100, 40)
+	anchors := []string{"Partner", "YOU", "OPP", "Recent"}
+
+	// Baseline: a short, unique status token whose left column we track.
+	g.message = "Zalpha turn now"
+	base := g.View()
+	wantCol := posOf(base, "Zalpha").col
+	if wantCol < 0 {
+		t.Fatal("status marker not found in baseline view")
+	}
+	wantAnchors := map[string]pos{}
+	for _, a := range anchors {
+		wantAnchors[a] = posOf(base, a)
+	}
+
+	cases := map[string]string{
+		"short": "Zalpha now",
+		"long":  "Zalpha " + strings.Repeat("very long combined message ", 6),
+	}
+	for name, msg := range cases {
+		g.message = msg
+		view := g.View()
+		if got := posOf(view, "Zalpha").col; got != wantCol {
+			t.Errorf("case %q: status left edge moved from col %d to %d", name, wantCol, got)
+		}
+		for _, a := range anchors {
+			if got := posOf(view, a); got != wantAnchors[a] {
+				t.Errorf("case %q: anchor %q moved from %+v to %+v", name, a, wantAnchors[a], got)
+			}
+		}
+	}
 }
 
 // TestMainMenuLayoutStable verifies the menu does not shift as the selection
