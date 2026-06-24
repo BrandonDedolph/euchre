@@ -1332,14 +1332,21 @@ func (g *GamePlay) View() string {
 	var mainArea string
 	if showPanels {
 		centerHeight := lipgloss.Height(centerContent)
-		// Left column: the YOU scoreboard card at its natural height with the
-		// recent-log box filling the remainder, so the column total equals the
-		// table height and OPP (top-aligned at centerHeight) stays in line.
-		youCard := g.renderYouCard()
-		logBox := g.renderRecentLogBox(centerHeight - lipgloss.Height(youCard))
-		leftColumn := lipgloss.JoinVertical(lipgloss.Left, youCard, logBox)
-		rightPanel := g.renderRightPanel(centerHeight)
-		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, centerContent, rightPanel)
+		// Left column: the Recent log box alone, filling the full table height.
+		// Right column: the YOU card on top and the OPP card below it, both
+		// horizontally centered within the (wider) side-column width and padded to
+		// the table height. Both columns are sideColumnWidth wide, so centerContent
+		// stays screen-centered between them. (Width math: the table is 61 wide and
+		// each side column is sideColumnWidth, so the full layout needs
+		// 61 + 2*sideColumnWidth + screen-border margin — see fullLayoutMinWidth.)
+		leftColumn := g.renderRecentLogBox(centerHeight)
+
+		youCard := lipgloss.PlaceHorizontal(sideColumnWidth, lipgloss.Center, g.renderYouCard())
+		oppCard := lipgloss.PlaceHorizontal(sideColumnWidth, lipgloss.Center, g.renderOppCard())
+		stacked := lipgloss.JoinVertical(lipgloss.Center, youCard, oppCard)
+		rightColumn := lipgloss.PlaceVertical(centerHeight, lipgloss.Top, stacked)
+
+		mainArea = lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, centerContent, rightColumn)
 	} else {
 		scoreBar := lipgloss.PlaceHorizontal(tableWidth, lipgloss.Center, g.renderScoreBar())
 		mainArea = lipgloss.JoinVertical(lipgloss.Center, scoreBar, centerContent)
@@ -1668,61 +1675,86 @@ func (g *GamePlay) renderYouCard() string {
 		panelTrickDots(yourTricks, theme.ColGreen),
 	}
 
-	return boxFrame("YOU", theme.ColGreen, lipgloss.JoinVertical(lipgloss.Center, body...))
+	return boxFrame("YOU", theme.ColGreen, lipgloss.JoinVertical(lipgloss.Center, body...), panelInnerWidth)
 }
 
 // renderRecentLogBox renders the recent play-log as a bordered vertical box that
-// fills the given height beneath the YOU card in the left column. The body holds
-// a constant logBoxBodyLines rows (padded when there are fewer events) so the
-// box is a constant height regardless of event count. Returns "" if height can't
-// fit a title + border + at least one body row.
+// fills the whole left column (the given height). Each event is delimited with a
+// leading dim bullet on its first line and a 2-space hanging indent on wrapped
+// continuation lines, so a multi-line event reads as one visually grouped block
+// with no blank rows between its lines. Body rows = available height minus the
+// frame; entries are kept newest-at-bottom and padded with blanks so the box is
+// a CONSTANT height regardless of event count (essential for layout stability).
+// Returns "" if height can't fit a title + border + at least one body row.
 func (g *GamePlay) renderRecentLogBox(height int) string {
 	if height < 4 {
 		return ""
 	}
 
-	muted := theme.Current.Muted
-	wrap := lipgloss.NewStyle().Width(panelInnerWidth)
+	// Body rows available inside the frame: title bar (1) + top/bottom border (2).
+	bodyLines := height - 3
+	if bodyLines < 1 {
+		bodyLines = 1
+	}
 
-	// Build wrapped body lines, newest at the bottom, clipping any single event
-	// to at most 2 visual lines.
+	muted := theme.Current.Muted
+	const bullet = "• "
+	const indent = "  " // hanging indent for wrapped continuation lines
+
+	// Wrap each event to the inner width minus the bullet/indent gutter, then
+	// prefix the first line with the dim bullet and continuation lines with the
+	// matching indent so the lines of one entry are grouped unambiguously.
+	wrap := lipgloss.NewStyle().Width(logBoxInnerWidth - len([]rune(bullet)))
+
 	var lines []string
 	for _, e := range g.eventLog {
-		rendered := wrap.Render(muted.Render(e))
-		evLines := strings.Split(rendered, "\n")
-		if len(evLines) > 2 {
-			evLines = evLines[:2]
-			evLines[1] += "…"
+		wrapped := strings.Split(wrap.Render(e), "\n")
+		for i, w := range wrapped {
+			prefix := indent
+			if i == 0 {
+				prefix = bullet
+			}
+			lines = append(lines, muted.Render(prefix)+muted.Render(w))
 		}
-		lines = append(lines, evLines...)
 	}
 
-	// Keep only the last logBoxBodyLines visual rows, then pad up to exactly that
-	// many so the box never changes height.
-	if len(lines) > logBoxBodyLines {
-		lines = lines[len(lines)-logBoxBodyLines:]
+	// Keep only the last bodyLines visual rows, then pad up to exactly that many
+	// so the box never changes height.
+	if len(lines) > bodyLines {
+		lines = lines[len(lines)-bodyLines:]
 	}
-	for len(lines) < logBoxBodyLines {
+	for len(lines) < bodyLines {
 		lines = append(lines, "")
 	}
 
 	body := lipgloss.NewStyle().
-		Width(panelInnerWidth).
-		Height(logBoxBodyLines).
+		Width(logBoxInnerWidth).
+		Height(bodyLines).
 		Render(strings.Join(lines, "\n"))
 
-	box := boxFrame("Recent", theme.ColBlue, body)
-	return lipgloss.PlaceVertical(height, lipgloss.Top, box)
+	return boxFrame("Recent", theme.ColBlue, body, logBoxInnerWidth)
 }
 
 // Layout sizing. panelInnerWidth is the content width inside each side-panel box
 // (outer = 13 incl. the rounded border). The min/full thresholds decide between
 // the too-small guard, the compact (panel-less) layout, and the full HUD layout.
 const (
-	panelInnerWidth    = 11 // content width inside a panel box (outer = 13 incl. border)
-	minPlayableWidth   = 64 // table (~61 wide) + screen-border margin
-	minPlayableHeight  = 20 // enough rows for the table core
-	fullLayoutMinWidth = 89 // table (61) + both panel boxes (13 each) + screen border
+	panelInnerWidth   = 11 // content width inside a scoreboard panel box (outer = 13 incl. border)
+	minPlayableWidth  = 64 // table (~61 wide) + screen-border margin
+	minPlayableHeight = 20 // enough rows for the table core
+
+	// sideColumnWidth is the outer width of BOTH side columns of the full layout
+	// (the Recent box on the left, the stacked YOU/OPP cards on the right). The
+	// two columns must be equal width so the table stays screen-centered between
+	// them. It is wider than the 13-wide scoreboards so the Recent box is roomy;
+	// the scoreboards keep their 13 width and are centered within this column.
+	sideColumnWidth  = 19                  // outer width of each side column
+	logBoxInnerWidth = sideColumnWidth - 2 // content width inside the Recent box (border = 2)
+
+	// fullLayoutMinWidth gates the full HUD vs the compact fallback. It must clear
+	// table (61) + both side columns (sideColumnWidth each) + the screen-border
+	// margin (2); below it we drop to the compact score-bar layout.
+	fullLayoutMinWidth = 61 + 2*sideColumnWidth + 2 // table + both side columns + screen border
 
 	// shuffleArtWidth is a constant width the shuffle title and deck art are
 	// centered within so the animation doesn't jitter as their widths change
@@ -1734,31 +1766,15 @@ const (
 	// stays a constant size between tips.
 	coachBoxBodyLines = 4
 	coachBoxHeight    = coachBoxBodyLines + 3
-
-	// logBoxBodyLines is the reserved height of the recent-log box's body; the
-	// box renders at a constant height regardless of how many events exist so the
-	// left column always equals the table height and nothing shifts.
-	logBoxBodyLines = 12
 )
 
-// panelBox wraps a panel's body in a rounded border with a colored title bar,
-// then centers it vertically in the given column height so it reads as a
-// self-contained card rather than a full-height divider.
-func panelBox(title string, accent lipgloss.TerminalColor, body []string, height int) string {
-	box := boxFrame(title, accent, lipgloss.JoinVertical(lipgloss.Center, body...))
-
-	// Top-align both panels so their title bars line up; pad below to fill the
-	// column height beside the table.
-	return lipgloss.PlaceVertical(height, lipgloss.Top, box)
-}
-
 // boxFrame wraps inner content in the shared panel frame: a centered, bold,
-// colored title bar atop a rounded border, all at panelInnerWidth. Used by both
-// panelBox (the scoreboards) and the recent-log box so the left column stays one
-// constant width.
-func boxFrame(title string, accent lipgloss.TerminalColor, inner string) string {
+// colored title bar atop a rounded border, at the given inner content width.
+// Used by the YOU/OPP scoreboard cards (at panelInnerWidth) and the recent-log
+// box (at logBoxInnerWidth) so each box controls its own width.
+func boxFrame(title string, accent lipgloss.TerminalColor, inner string, innerWidth int) string {
 	header := lipgloss.NewStyle().
-		Width(panelInnerWidth).
+		Width(innerWidth).
 		Align(lipgloss.Center).
 		Bold(true).
 		Background(accent).
@@ -1767,7 +1783,7 @@ func boxFrame(title string, accent lipgloss.TerminalColor, inner string) string 
 
 	content := lipgloss.JoinVertical(lipgloss.Center, header, inner)
 	return lipgloss.NewStyle().
-		Width(panelInnerWidth).
+		Width(innerWidth).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColBlue).
 		Render(content)
@@ -1794,9 +1810,10 @@ func panelTrickDots(n int, accent lipgloss.TerminalColor) string {
 	return lipgloss.PlaceHorizontal(panelInnerWidth, lipgloss.Center, s)
 }
 
-// renderRightPanel renders the opponents' scoreboard card (score + tricks),
-// mirroring renderLeftPanel. Global state lives in the banner/ticker.
-func (g *GamePlay) renderRightPanel(height int) string {
+// renderOppCard renders the opponents' scoreboard card (score + tricks) at its
+// NATURAL height, mirroring renderYouCard, so it can stack beneath the YOU card
+// in the right column. Global state lives in the banner.
+func (g *GamePlay) renderOppCard() string {
 	scores := g.game.Scores()
 	var oppTricks int
 	if r := g.game.Round(); r != nil {
@@ -1817,7 +1834,7 @@ func (g *GamePlay) renderRightPanel(height int) string {
 		panelTrickDots(oppTricks, theme.ColRed),
 	}
 
-	return panelBox("OPP", theme.ColRed, body, height)
+	return boxFrame("OPP", theme.ColRed, lipgloss.JoinVertical(lipgloss.Center, body...), panelInnerWidth)
 }
 
 // trumpBadge renders a small filled trump chip (suit symbol + name) colored to

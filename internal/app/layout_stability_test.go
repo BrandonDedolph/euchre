@@ -70,11 +70,18 @@ func assertAnchorsStable(t *testing.T, g *GamePlay, anchors []string, mutate map
 	}
 }
 
-func TestGamePlayLayoutStable(t *testing.T) {
-	g := renderableGamePlay(t, false, 100, 40)
+// fullLayoutWidth is wide enough to clear fullLayoutMinWidth so the full HUD
+// (Recent box on the left, stacked YOU/OPP cards on the right) renders. The
+// columns are now wider than before, so the old 100-col width would fall back to
+// the compact layout — these tests use a width that matches the real terminal.
+const fullLayoutWidth = 110
 
-	// "Recent" is the left-column log box title; it must stay pinned across every
-	// event-count and message-length change just like the scoreboards.
+func TestGamePlayLayoutStable(t *testing.T) {
+	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
+
+	// "Recent" is the left-column log box title; "YOU"/"OPP" are now the stacked
+	// scoreboard cards on the RIGHT. All must stay pinned across every event-count
+	// and message-length change.
 	anchors := []string{"Partner", "YOU", "OPP", "Recent"}
 
 	assertAnchorsStable(t, g, anchors, map[string]func(){
@@ -114,11 +121,42 @@ func TestGamePlayLayoutStable(t *testing.T) {
 	})
 }
 
+// TestGamePlayLogBulletGrouping verifies each Recent entry is delimited with a
+// leading bullet on its first line (so multi-line entries are unambiguous), and
+// that the box stays a constant height as entries are added — the whole point of
+// the delimiter is grouping without disturbing layout stability.
+func TestGamePlayLogBulletGrouping(t *testing.T) {
+	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
+
+	g.eventLog = []string{"You played 9♠"}
+	one := g.View()
+	if !strings.Contains(one, "• You played 9♠") {
+		t.Errorf("expected a bullet-prefixed entry in the Recent box, view was:\n%s", one)
+	}
+	oneHeight := lipgloss.Height(one)
+
+	// A multi-line entry must still start with a single bullet and keep the box
+	// (and thus the whole view) the same height.
+	g.eventLog = []string{
+		"You played 9♠",
+		"West ordered up the right bower and led it into your partner's void",
+		"Partner led A♠",
+	}
+	many := g.View()
+	bullets := strings.Count(many, "• ")
+	if bullets < 3 {
+		t.Errorf("expected at least 3 bullet markers (one per entry), got %d", bullets)
+	}
+	if got := lipgloss.Height(many); got != oneHeight {
+		t.Errorf("view height changed with more/multi-line entries: one=%d many=%d", oneHeight, got)
+	}
+}
+
 // TestGamePlayLogBoxConstantHeight verifies the recent-log box keeps the whole
 // view the same height whether the log is empty or full, so it never shoves the
 // rest of the layout vertically.
 func TestGamePlayLogBoxConstantHeight(t *testing.T) {
-	g := renderableGamePlay(t, false, 100, 40)
+	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 
 	g.eventLog = nil
 	empty := lipgloss.Height(g.View())
@@ -134,7 +172,7 @@ func TestGamePlayLogBoxConstantHeight(t *testing.T) {
 }
 
 func TestGamePlayTutorialCoachLayoutStable(t *testing.T) {
-	g := renderableGamePlay(t, true, 100, 40)
+	g := renderableGamePlay(t, true, fullLayoutWidth, 40)
 
 	assertAnchorsStable(t, g, []string{"Partner", "YOU", "OPP", "Recent"}, map[string]func(){
 		"short coach tip": func() {
@@ -171,7 +209,7 @@ func TestGamePlayCompactLayoutStable(t *testing.T) {
 // its left edge fixed as the message length changes (instead of re-centering and
 // sliding), and that anchors stay put across phase/message changes.
 func TestGamePlayStatusLeftPinned(t *testing.T) {
-	g := renderableGamePlay(t, false, 100, 40)
+	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 	anchors := []string{"Partner", "YOU", "OPP", "Recent"}
 
 	// Baseline: a short, unique status token whose left column we track.
