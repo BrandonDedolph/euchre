@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -205,39 +206,63 @@ func TestGamePlayCompactLayoutStable(t *testing.T) {
 	})
 }
 
-// TestGamePlayStatusLeftPinned verifies the now left-aligned status line keeps
-// its left edge fixed as the message length changes (instead of re-centering and
-// sliding), and that anchors stay put across phase/message changes.
-func TestGamePlayStatusLeftPinned(t *testing.T) {
+// TestGamePlayStatusCentered verifies the status line is centered within the
+// fixed-width slot (not flush-left), and that anchors stay pinned and the view
+// height stays constant as the message length changes.
+func TestGamePlayStatusCentered(t *testing.T) {
 	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 	anchors := []string{"Partner", "YOU", "OPP", "Recent"}
 
-	// Baseline: a short, unique status token whose left column we track.
 	g.message = "Zalpha turn now"
 	base := g.View()
-	wantCol := posOf(base, "Zalpha").col
-	if wantCol < 0 {
-		t.Fatal("status marker not found in baseline view")
-	}
 	wantAnchors := map[string]pos{}
 	for _, a := range anchors {
 		wantAnchors[a] = posOf(base, a)
 	}
 
-	cases := map[string]string{
+	// The status row should be centered: its visible text has roughly equal
+	// padding on both sides (and is clearly not flush-left at the margin).
+	ansi := regexp.MustCompile("\x1b\\[[0-9;]*m")
+	statusLine := ""
+	for _, line := range strings.Split(base, "\n") {
+		if strings.Contains(ansi.ReplaceAllString(line, ""), "Zalpha") {
+			statusLine = ansi.ReplaceAllString(line, "")
+			break
+		}
+	}
+	if statusLine == "" {
+		t.Fatal("status marker not found in baseline view")
+	}
+	// Drop the outer screen border (leading "│ ... │") before measuring padding.
+	// A centered short message has large, near-equal padding on both sides; a
+	// flush-left one would have only a couple of columns on the left. (A few
+	// columns of asymmetry is expected from integer-rounding at the slot and
+	// block centering layers.)
+	trimmed := strings.Trim(statusLine, "│")
+	left := len(trimmed) - len(strings.TrimLeft(trimmed, " "))
+	right := len(trimmed) - len(strings.TrimRight(trimmed, " "))
+	if left < 20 {
+		t.Errorf("status appears flush-left (left pad %d); expected centered", left)
+	}
+	if diff := left - right; diff < -5 || diff > 5 {
+		t.Errorf("status not centered: left pad %d vs right pad %d", left, right)
+	}
+
+	// Anchors and height stay stable across message length changes.
+	baseHeight := lipgloss.Height(base)
+	for name, msg := range map[string]string{
 		"short": "Zalpha now",
 		"long":  "Zalpha " + strings.Repeat("very long combined message ", 6),
-	}
-	for name, msg := range cases {
+	} {
 		g.message = msg
 		view := g.View()
-		if got := posOf(view, "Zalpha").col; got != wantCol {
-			t.Errorf("case %q: status left edge moved from col %d to %d", name, wantCol, got)
-		}
 		for _, a := range anchors {
 			if got := posOf(view, a); got != wantAnchors[a] {
 				t.Errorf("case %q: anchor %q moved from %+v to %+v", name, a, wantAnchors[a], got)
 			}
+		}
+		if got := lipgloss.Height(view); got != baseHeight {
+			t.Errorf("case %q: view height changed from %d to %d", name, baseHeight, got)
 		}
 	}
 }

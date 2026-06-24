@@ -1370,19 +1370,6 @@ func (g *GamePlay) View() string {
 			Render(s)
 	}
 
-	// slotLeft is slot but left-aligned: the text grows rightward from a fixed
-	// left margin instead of re-centering (which would slide its left edge as the
-	// message length changes). MaxHeight caps vertical growth so a long message
-	// can't push the whole block down.
-	slotLeft := func(s string, h int) string {
-		return lipgloss.NewStyle().
-			Width(contentWidth).
-			Height(h).
-			MaxHeight(h).
-			Align(lipgloss.Left).
-			Render(s)
-	}
-
 	// Assemble vertical sections: [banner] · main area · ticker · status ·
 	// [coach] · help. Optional regions still reserve their rows when empty so
 	// that their first appearance doesn't push the table down.
@@ -1399,12 +1386,13 @@ func (g *GamePlay) View() string {
 	}
 	// Pre-truncate the status to a single line so a long combined message can't
 	// wrap and grow the slot vertically (which would shove the block up/down).
+	// Centered within the fixed-width slot; MaxHeight keeps it from growing.
 	statusLine := lipgloss.NewStyle().MaxWidth(contentWidth).Render(theme.Current.Accent.Render(phaseStr))
-	sections = append(sections, slotLeft(statusLine, 2))
+	sections = append(sections, slot(statusLine, 2))
 	if g.tutorial {
 		sections = append(sections, slot(g.renderCoachBox(contentWidth), coachBoxHeight))
 	}
-	sections = append(sections, slotLeft(theme.Current.Help.Render(helpStr), 1))
+	sections = append(sections, slot(theme.Current.Help.Render(helpStr), 1))
 
 	innerContent := lipgloss.JoinVertical(lipgloss.Center, sections...)
 
@@ -1671,8 +1659,7 @@ func (g *GamePlay) renderYouCard() string {
 	body := []string{
 		panelCenter(scoreStyle, scoreStr),
 		"",
-		panelCenter(theme.Current.Muted, "Tricks"),
-		panelTrickDots(yourTricks, theme.ColGreen),
+		panelTricks(yourTricks, theme.ColGreen),
 	}
 
 	return boxFrame("YOU", theme.ColGreen, lipgloss.JoinVertical(lipgloss.Center, body...), panelInnerWidth)
@@ -1794,9 +1781,9 @@ func panelCenter(style lipgloss.Style, s string) string {
 	return style.Width(panelInnerWidth).Align(lipgloss.Center).Render(s)
 }
 
-// panelTrickDots renders 5 trick pips (filled in the team accent, empty muted),
-// centered to the panel width.
-func panelTrickDots(n int, accent lipgloss.TerminalColor) string {
+// trickDots returns the 5-pip tracker string (filled in the team accent, empty
+// muted), with no surrounding placement.
+func trickDots(n int, accent lipgloss.TerminalColor) string {
 	filled := lipgloss.NewStyle().Foreground(accent)
 	empty := theme.Current.Muted
 	s := ""
@@ -1807,7 +1794,16 @@ func panelTrickDots(n int, accent lipgloss.TerminalColor) string {
 			s += empty.Render("○")
 		}
 	}
-	return lipgloss.PlaceHorizontal(panelInnerWidth, lipgloss.Center, s)
+	return s
+}
+
+// panelTricks stacks the "Tricks" label directly above the pip tracker and
+// centers the pair as one unit, so the label sits centered over the bubbles
+// (rather than each centering independently and ending up a column apart).
+func panelTricks(n int, accent lipgloss.TerminalColor) string {
+	label := theme.Current.Muted.Render("Tricks")
+	block := lipgloss.JoinVertical(lipgloss.Center, label, trickDots(n, accent))
+	return lipgloss.PlaceHorizontal(panelInnerWidth, lipgloss.Center, block)
 }
 
 // renderOppCard renders the opponents' scoreboard card (score + tricks) at its
@@ -1830,8 +1826,7 @@ func (g *GamePlay) renderOppCard() string {
 	body := []string{
 		panelCenter(scoreStyle, scoreStr),
 		"",
-		panelCenter(theme.Current.Muted, "Tricks"),
-		panelTrickDots(oppTricks, theme.ColRed),
+		panelTricks(oppTricks, theme.ColRed),
 	}
 
 	return boxFrame("OPP", theme.ColRed, lipgloss.JoinVertical(lipgloss.Center, body...), panelInnerWidth)
