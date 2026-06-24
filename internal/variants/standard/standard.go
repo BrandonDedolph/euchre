@@ -80,8 +80,8 @@ func (s *Standard) TrumpHierarchy(trump engine.Suit) []engine.Card {
 	}
 
 	return []engine.Card{
-		{Suit: trump, Rank: engine.Jack},          // Right Bower
-		{Suit: leftBowerSuit, Rank: engine.Jack},  // Left Bower
+		{Suit: trump, Rank: engine.Jack},         // Right Bower
+		{Suit: leftBowerSuit, Rank: engine.Jack}, // Left Bower
 		{Suit: trump, Rank: engine.Ace},
 		{Suit: trump, Rank: engine.King},
 		{Suit: trump, Rank: engine.Queen},
@@ -115,11 +115,20 @@ func (s *Standard) ScoreRound(result engine.RoundResult) engine.ScoreUpdate {
 	update := engine.ScoreUpdate{}
 
 	if result.WasEuchred {
-		// Defending team scores 2 points
+		// Defenders score the euchre. Use the already-resolved DefendPoints
+		// (2 normally, 4 when defended alone) so this can't drift from
+		// Round.Result(); fall back to the alone/standard split if it's unset.
+		points := result.DefendPoints
+		if points == 0 {
+			points = 2
+			if result.WasDefendedAlone {
+				points = 4
+			}
+		}
 		if result.Makers == 0 {
-			update.Team1Delta = 2
+			update.Team1Delta = points
 		} else {
-			update.Team0Delta = 2
+			update.Team0Delta = points
 		}
 		return update
 	}
