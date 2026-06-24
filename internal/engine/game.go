@@ -105,6 +105,11 @@ func (g *Game) Dealer() int {
 	return g.dealer
 }
 
+// StickTheDealer reports whether the stick-the-dealer rule is in effect.
+func (g *Game) StickTheDealer() bool {
+	return g.rules.StickTheDealer
+}
+
 // NumPlayers returns the number of players
 func (g *Game) NumPlayers() int {
 	return g.numPlayers
@@ -310,4 +315,9 @@ func (s *GameState) NumPlayers() int {
 // Round returns the current round
 func (s *GameState) Round() *Round {
 	return s.game.Round()
+}
+
+// StickTheDealer reports whether the stick-the-dealer rule is in effect.
+func (s *GameState) StickTheDealer() bool {
+	return s.game.StickTheDealer()
 }

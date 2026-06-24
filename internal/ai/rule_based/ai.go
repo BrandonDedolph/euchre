@@ -61,8 +61,11 @@ func (a *AI) DecideBid(state *engine.GameState, bidRound int) engine.BidDecision
 			decision.Alone = goAlone
 		}
 	} else {
-		// Round 2 - check if stick the dealer applies
-		stickTheDealer := false // Could get this from variant config
+		// Round 2 - check if stick the dealer applies. Under stick-the-dealer the
+		// dealer may not pass and must name a legal trump suit, so we must pass the
+		// real rule value through; otherwise a stuck AI dealer returns a pass that
+		// the engine rejects, crashing the game back to the menu.
+		stickTheDealer := state.StickTheDealer()
 
 		shouldBid, suit, goAlone := a.bidder.EvaluateRound2(hand, turnedCard.Suit, isDealer, stickTheDealer)
 		if shouldBid {

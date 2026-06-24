@@ -57,8 +57,19 @@ func (e *BiddingEvaluator) EvaluateRound2(hand []engine.Card, excludeSuit engine
 		}
 	}
 
-	// Dealer must call if stick the dealer is on
-	if isDealer && stickTheDealer && bestSuit != engine.NoSuit {
+	// Dealer must call if stick the dealer is on. The dealer cannot legally pass,
+	// so we must always return a legal, non-excluded suit. If every candidate hand
+	// scored 0 (so bestSuit was never set), fall back to the first suit that is not
+	// the turned-down (excluded) suit so the call is still legal.
+	if isDealer && stickTheDealer {
+		if bestSuit == engine.NoSuit {
+			for _, suit := range []engine.Suit{engine.Clubs, engine.Diamonds, engine.Hearts, engine.Spades} {
+				if suit != excludeSuit {
+					bestSuit = suit
+					break
+				}
+			}
+		}
 		shouldGoAlone := bestStrength >= 85
 		return true, bestSuit, shouldGoAlone
 	}
