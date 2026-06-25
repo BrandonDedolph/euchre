@@ -769,6 +769,9 @@ func (g *GamePlay) handleAction() (tea.Model, tea.Cmd) {
 				result := history[len(history)-1]
 				// Set CurrentTrick to the completed trick so it displays during animation
 				g.tableView.CurrentTrick = result.Cards
+				// Sync card-back stacks so the seat that just emptied its hand
+				// stops showing a played card during the trick-ack window.
+				g.refreshSeatCounts()
 				// Delay trick done message to allow card animation to finish
 				return g, tea.Batch(
 					tea.Tick(cardPlayDelay, func(t time.Time) tea.Msg { return cardPlayTickMsg{} }),
@@ -1029,6 +1032,9 @@ func (g *GamePlay) processAITurns() tea.Cmd {
 				result := history[len(history)-1]
 				// Set CurrentTrick to the completed trick so it displays during animation
 				g.tableView.CurrentTrick = result.Cards
+				// Sync card-back stacks so the seat that just emptied its hand
+				// stops showing a played card during the trick-ack window.
+				g.refreshSeatCounts()
 				return aiCardPlayWithTrickMsg{card: card, player: current, result: result}
 			}
 			return aiCardPlayMsg{card: card, player: current}
@@ -1172,6 +1178,24 @@ func (g *GamePlay) updateTableView() {
 	// handler, which does not route through here). Any normal table refresh
 	// means we're no longer reviewing a finished trick, so clear it.
 	g.tableView.TrickWinner = -1
+}
+
+// refreshSeatCounts syncs the per-seat card-back stacks and trick counts with
+// the engine without touching CurrentTrick. The trick-completion paths can't
+// call updateTableView (it would replace the finished trick on the table with
+// the new empty one), but the seat that played the trick-winning card still
+// needs its card-back stack decremented — otherwise it keeps showing a card it
+// already played, most visibly on the final trick where the seat should be
+// empty.
+func (g *GamePlay) refreshSeatCounts() {
+	round := g.game.Round()
+	if round == nil {
+		return
+	}
+	for i := 0; i < 4; i++ {
+		g.tableView.PlayerHands[i] = len(g.game.Hand(i))
+		g.tableView.TricksWon[i] = round.TricksWon(i)
+	}
 }
 
 // nextDealCard returns a command to deal the next card after a delay
