@@ -76,6 +76,11 @@ type GamePlay struct {
 
 	// Suit selector for bidding round 2
 	suitSelector *components.SuitSelector
+
+	// showHelp toggles the full keybind sheet overlaid on the board (the "?"
+	// key). It is an in-place overlay rather than a screen swap so the game in
+	// progress is preserved; any key dismisses it.
+	showHelp bool
 }
 
 // rulesFromVariant maps a selected variant's options to the engine's Rules
@@ -502,6 +507,18 @@ func (g *GamePlay) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if msg.String() == "q" || msg.String() == "esc" {
 			return g, Navigate(ScreenMainMenu)
 		}
+		return g, nil
+	}
+
+	// The help sheet is a modal overlay: while it is open, any key dismisses it
+	// and is otherwise swallowed so it can't also act on the board behind it.
+	if g.showHelp {
+		g.showHelp = false
+		return g, nil
+	}
+	// "?" opens the full keybind sheet over the board (state preserved).
+	if msg.String() == "?" {
+		g.showHelp = true
 		return g, nil
 	}
 
@@ -1328,22 +1345,11 @@ func (g *GamePlay) View() string {
 			playerName += " " + dealerStyle.Render("DEALER")
 		}
 
-		// Build header - center everything for consistent layout
-		var playerHeader string
 		phase := g.game.Phase()
-		if phase == engine.PhaseBidRound2 && g.game.CurrentPlayer() == g.humanPlayer && g.suitSelector != nil {
-			// Show suit selector below name during round 2 bidding
-			suitSelectorWidget := g.suitSelector.Render()
-			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, suitSelectorWidget)
-		} else if phase == engine.PhaseDiscard && len(hand) == 6 {
-			discardMsg := theme.Current.Muted.Render("(select one to discard)")
-			playerHeader = lipgloss.JoinVertical(lipgloss.Center, playerName, discardMsg)
-		} else {
-			playerHeader = playerName
-		}
+		isYourTurn := g.game.CurrentPlayer() == g.humanPlayer
 
 		legalPlays := make([]engine.Card, 0)
-		if phase == engine.PhasePlay && g.game.CurrentPlayer() == g.humanPlayer {
+		if phase == engine.PhasePlay && isYourTurn {
 			if round != nil && round.Trick() != nil {
 				legalPlays = engine.LegalPlays(engine.NewHandWith(hand), round.Trick())
 			}
@@ -1352,7 +1358,6 @@ func (g *GamePlay) View() string {
 		// Only show selection when it's your turn to select a card
 		// Must be in discard/play phase, your turn, and not waiting for acknowledgment
 		selectedIdx := -1
-		isYourTurn := g.game.CurrentPlayer() == g.humanPlayer
 		canSelect := (phase == engine.PhaseDiscard || phase == engine.PhasePlay) &&
 			isYourTurn && !g.waitingForTrickAck && !g.waitingForRoundAck
 		if canSelect {
@@ -1360,11 +1365,17 @@ func (g *GamePlay) View() string {
 		}
 
 		handCards := components.RenderHand(hand, selectedIdx, legalPlays, g.tableView.Trump, g.coachPickIndex())
-		handStr = lipgloss.JoinVertical(lipgloss.Center, playerHeader, handCards)
+
+		// Diegetic controls: the keys live on the thing they act on rather than in
+		// a separate footer legend. During card selection (play/discard) the hand
+		// is flanked by ◄/► move arrows and the chosen verb tags the raised card;
+		// cursor-less choices (bidding, defend) render as a chip row below it.
+		handStr = g.renderHandArea(playerName, phase, isYourTurn, selectedIdx, len(hand), handCards)
 	}
 
-	// Fixed height for hand area (1 name + 1 playable marker + 5 cards + 1 raised = 8)
-	handStr = lipgloss.NewStyle().Height(8).Render(handStr)
+	// Fixed height keeps the table above the hand from shifting as the per-phase
+	// controls (verb tag, chip row) appear and disappear. See handAreaHeight.
+	handStr = lipgloss.NewStyle().Height(handAreaHeight).Render(handStr)
 
 	// Build status bar with phase message (trump info now in side panel)
 	phaseStr := g.getPhaseMessage()
@@ -1378,9 +1389,6 @@ func (g *GamePlay) View() string {
 			phaseStr = g.message
 		}
 	}
-
-	// Help text
-	helpStr := g.getHelpText()
 
 	// Build center content (table + hand)
 	// Center the hand to match table width
@@ -1458,9 +1466,16 @@ func (g *GamePlay) View() string {
 	// Pin the controls/help as a footer on the very bottom row (mirroring the
 	// banner header at the top), and center the rest of the content in the space
 	// above it. footer spans the full content width so it reads as a bottom bar.
-	footer := lipgloss.NewStyle().Width(width - 4).Align(lipgloss.Center).
-		Render(theme.Current.Help.Render(helpStr))
+	// Minimal, always-present corner controls. Everything situational now lives
+	// on the board (see renderHandArea); only the two global keys sit here.
+	footer := lipgloss.NewStyle().Width(width - 4).Align(lipgloss.Right).
+		Render(theme.Current.Help.Render("esc quit · ? help"))
 	footerHeight := lipgloss.Height(footer)
+	// The "?" help sheet replaces the board content as a centered modal; the
+	// frame and corner footer stay so it reads as an overlay, not a new screen.
+	if g.showHelp {
+		innerContent = g.renderHelpSheet()
+	}
 	body := lipgloss.Place(width-4, height-4-footerHeight, lipgloss.Center, lipgloss.Center, innerContent)
 	centeredContent := body + "\n" + footer
 
@@ -1665,38 +1680,153 @@ func (g *GamePlay) getPhaseMessage() string {
 	}
 }
 
-// getHelpText returns context-appropriate help text
-func (g *GamePlay) getHelpText() string {
-	// Check waiting states first
+// Hand-area geometry. The block is a constant height so the table above it
+// never shifts as per-phase controls appear and disappear:
+// verb tag(1) + header(name + sub-line = 2) + cards(7) + chip row(1) = 11.
+const (
+	cardCellWidth  = 7  // matches a column width in components.RenderHand
+	arrowCellWidth = 3  // gutter the ◄/► move arrows occupy beside the hand
+	handAreaHeight = 11 // total reserved rows; see breakdown above
+)
+
+// keyCap renders a control hint as a highlighted key glyph followed by a muted
+// label, e.g. "⏎ Play". Shared by the on-board controls, the chip row, and the
+// help sheet so keys read consistently everywhere.
+func keyCap(key, label string) string {
+	k := lipgloss.NewStyle().Foreground(theme.ColGold).Bold(true).Render(key)
+	return k + theme.Current.Muted.Render(" "+label)
+}
+
+// renderHandArea composes the diegetic control layer around the player's hand:
+//
+//	            ⏎ Play          verb tag over the raised card (play/discard)
+//	  You (2) DEALER            name + optional sub-line (suit selector / hint)
+//	◄ [ the hand of cards ] ►   move arrows when a card cursor is active
+//	   P Pass · A Alone         chip row for cursor-less choices (bidding, etc.)
+//
+// Every row is reserved (blank when unused) so the block stays handAreaHeight
+// tall and the table above never jumps between phases.
+func (g *GamePlay) renderHandArea(playerName string, phase engine.GamePhase, isYourTurn bool, selectedIdx, handLen int, handCards string) string {
+	arrowStyle := lipgloss.NewStyle().Foreground(theme.ColGold).Bold(true)
+
+	// Header sub-line: suit selector during round-2 bidding, the discard hint
+	// during the dealer's discard, else blank (still reserved for height).
+	subLine := ""
+	switch {
+	case phase == engine.PhaseBidRound2 && isYourTurn && g.suitSelector != nil:
+		subLine = g.suitSelector.Render()
+	case phase == engine.PhaseDiscard && handLen == 6:
+		subLine = theme.Current.Muted.Render("(select one to discard)")
+	}
+	header := lipgloss.JoinVertical(lipgloss.Center, playerName, subLine)
+
+	// Move arrows flank the hand whenever a card cursor is active and there is
+	// more than one card to move between.
+	arrowsShown := selectedIdx >= 0 && handLen > 1
+	handRow := handCards
+	if arrowsShown {
+		gutter := func(s string) string {
+			return lipgloss.NewStyle().Width(arrowCellWidth).Align(lipgloss.Center).Render(s)
+		}
+		// Dim the boundary arrow: the cursor clamps (no wrap), so a lit arrow at
+		// either end would imply a move that isn't possible.
+		arrow := func(glyph string, active bool) string {
+			if active {
+				return arrowStyle.Render(glyph)
+			}
+			return theme.Current.Muted.Render(glyph)
+		}
+		handRow = lipgloss.JoinHorizontal(lipgloss.Center,
+			gutter(arrow("◄", selectedIdx > 0)), handCards,
+			gutter(arrow("►", selectedIdx < handLen-1)))
+	}
+	blockWidth := lipgloss.Width(handRow)
+
+	// Verb tag floats over the raised (selected) card during play/discard. It is
+	// left-padded to the selected card's column, so the whole block must be
+	// assembled left-aligned (the table centers it as a unit afterwards).
+	verbRow := ""
+	if selectedIdx >= 0 {
+		verb := map[engine.GamePhase]string{engine.PhasePlay: "Play", engine.PhaseDiscard: "Discard"}[phase]
+		if verb != "" {
+			tag := keyCap("⏎", verb)
+			leftPad := selectedIdx * cardCellWidth
+			if arrowsShown {
+				leftPad += arrowCellWidth
+			}
+			leftPad += (cardCellWidth - lipgloss.Width(tag)) / 2 // nudge toward card center
+			if leftPad < 0 {
+				leftPad = 0
+			}
+			verbRow = strings.Repeat(" ", leftPad) + tag
+		}
+	}
+
+	// Center the header and chip row over the hand; the verb tag stays
+	// column-aligned. JoinVertical(Left) preserves the verb tag's left padding.
+	center := func(s string) string { return lipgloss.PlaceHorizontal(blockWidth, lipgloss.Center, s) }
+	return lipgloss.JoinVertical(lipgloss.Left,
+		verbRow, center(header), handRow, center(g.handChips(isYourTurn)))
+}
+
+// handChips renders the cursor-less choices for the current state as a row of
+// key caps (bidding, defend-alone, and the acknowledgement prompts). Play and
+// discard return "" — their controls are the arrows and verb tag on the hand.
+func (g *GamePlay) handChips(isYourTurn bool) string {
+	sep := theme.Current.Muted.Render("   ")
 	if g.waitingForRoundAck {
 		if g.game.IsOver() {
-			return "Enter: Return to menu"
+			return keyCap("⏎", "Return to menu")
 		}
-		return "Enter: Next round • Esc: Quit"
+		return keyCap("⏎", "Next round")
 	}
 	if g.waitingForTrickAck {
-		return "Enter: Continue"
+		return keyCap("⏎", "Continue")
 	}
-
-	phase := g.game.Phase()
-
-	switch phase {
+	if !isYourTurn {
+		return ""
+	}
+	switch g.game.Phase() {
 	case engine.PhaseBidRound1:
-		return "Enter: Order up • P: Pass • A: Order up alone • Esc: Quit"
+		return strings.Join([]string{keyCap("⏎", "Order up"), keyCap("P", "Pass"), keyCap("A", "Alone")}, sep)
 	case engine.PhaseBidRound2:
-		return "←/→: Select suit • Enter: Call • P: Pass • Esc: Quit"
-	case engine.PhaseDiscard:
-		return "←/→: Select card • Enter: Discard • Esc: Quit"
+		return strings.Join([]string{keyCap("⏎", "Call"), keyCap("P", "Pass")}, sep)
 	case engine.PhaseDefendAlone:
-		if g.game.CurrentPlayer() == g.humanPlayer {
-			return "Y: Defend alone • N: Decline • Esc: Quit"
-		}
-		return "Esc: Quit"
-	case engine.PhasePlay:
-		return "←/→: Select card • Enter: Play • Esc: Quit"
-	default:
-		return "Esc: Return to menu"
+		return strings.Join([]string{keyCap("Y", "Defend alone"), keyCap("N", "Decline")}, sep)
 	}
+	return ""
+}
+
+// renderHelpSheet is the full keybind reference shown as an in-place overlay
+// when "?" is pressed (g.showHelp). It lists every control grouped by phase so
+// players can see the whole scheme without leaving the game in progress.
+func (g *GamePlay) renderHelpSheet() string {
+	title := theme.Current.Accent.Bold(true).Render("Controls")
+	row := func(keys, what string) string {
+		return lipgloss.JoinHorizontal(lipgloss.Left,
+			lipgloss.NewStyle().Width(12).Foreground(theme.ColGold).Bold(true).Render(keys),
+			theme.Current.Muted.Render(what))
+	}
+	lines := []string{
+		title,
+		"",
+		row("←/→  h/l", "Move card / suit cursor"),
+		row("Enter", "Play · Discard · Order up · Call"),
+		row("P", "Pass"),
+		row("A", "Order up alone"),
+		row("Y / N", "Defend alone / decline"),
+		row("Enter", "Continue to next trick / round"),
+		row("?", "Toggle this help"),
+		row("Esc  q", "Quit to menu"),
+		"",
+		theme.Current.Muted.Italic(true).Render("Press any key to close"),
+	}
+	body := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ColBlue).
+		Padding(1, 3).
+		Render(body)
 }
 
 // renderYouCard renders the YOU scoreboard card at its NATURAL height; View()
