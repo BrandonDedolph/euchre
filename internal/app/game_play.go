@@ -1721,8 +1721,11 @@ func (g *GamePlay) renderHandArea(playerName string, phase engine.GamePhase, isY
 	// they share one row, paired with the flanking arrows as a single cluster.
 	action := g.handChips(phase, isYourTurn)
 	if selectedIdx >= 0 {
-		if verb := map[engine.GamePhase]string{engine.PhasePlay: "Play", engine.PhaseDiscard: "Discard"}[phase]; verb != "" {
-			action = keyCap("⏎", verb)
+		switch phase {
+		case engine.PhasePlay:
+			action = keyCap("⏎", "Play")
+		case engine.PhaseDiscard:
+			action = keyCap("⏎", "Discard")
 		}
 	}
 

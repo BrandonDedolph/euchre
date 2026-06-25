@@ -86,8 +86,12 @@ func TestHandAreaVerbTag(t *testing.T) {
 	}
 }
 
-// TestHandAreaArrows checks move arrows appear during selection (and dim, rather
-// than vanish, at the ends) but are absent when there is no cursor.
+// TestHandAreaArrows checks move arrows appear during selection (and still render
+// — dimmed rather than vanishing — at the ends so the row width stays constant)
+// but are absent when there is no cursor. Note: lipgloss strips color in the
+// non-TTY test environment, so the dim-vs-lit *styling* can't be asserted from
+// the rendered output here; that detail is verified visually (and in the demo
+// GIFs). What we can pin down is glyph presence/absence and stable width.
 func TestHandAreaArrows(t *testing.T) {
 	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 	hand := fiveCardHand()
@@ -95,18 +99,35 @@ func TestHandAreaArrows(t *testing.T) {
 		return g.renderHandArea("You (0)", phase, yourTurn, sel, len(hand), components.RenderHand(hand, sel, nil, engine.Hearts, -1))
 	}
 
-	// Mid-hand selection: both arrows present.
-	area := render(engine.PhasePlay, true, 2)
-	if !strings.Contains(area, "◄") || !strings.Contains(area, "►") {
-		t.Errorf("play+selection: expected both ◄ and ► arrows")
+	// Both arrows render for every cursor position, including the two ends, so the
+	// hand never changes width as the selection moves.
+	for _, sel := range []int{0, 2, len(hand) - 1} {
+		area := render(engine.PhasePlay, true, sel)
+		if !strings.Contains(area, "◄") || !strings.Contains(area, "►") {
+			t.Errorf("selection at %d: expected both ◄ and ► to render", sel)
+		}
 	}
-	// Boundary arrows still render (just dimmed) so the row width stays constant.
-	if a := render(engine.PhasePlay, true, 0); !strings.Contains(a, "◄") {
-		t.Errorf("leftmost selection: ◄ should still render (dimmed)")
-	}
+
 	// No cursor (bidding): no arrows.
 	if a := render(engine.PhaseBidRound1, true, -1); strings.Contains(a, "◄") || strings.Contains(a, "►") {
 		t.Errorf("bidding: arrows should not render without a card cursor")
+	}
+}
+
+// TestHandAreaDiscardSubLine covers the dealer's 6-card discard state: the
+// "(select one to discard)" hint renders and the block keeps its constant height
+// despite the extra sub-line.
+func TestHandAreaDiscardSubLine(t *testing.T) {
+	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
+	hand := append(fiveCardHand(), engine.NewCard(engine.Spades, engine.King)) // 6 cards
+	hc := components.RenderHand(hand, 0, nil, engine.Hearts, -1)
+
+	area := g.renderHandArea("You (0)", engine.PhaseDiscard, true, 0, len(hand), hc)
+	if !strings.Contains(area, "select one to discard") {
+		t.Errorf("6-card discard: expected the discard hint sub-line")
+	}
+	if h := lipgloss.Height(area); h != handAreaHeight {
+		t.Errorf("6-card discard: hand area height = %d, want %d", h, handAreaHeight)
 	}
 }
 
