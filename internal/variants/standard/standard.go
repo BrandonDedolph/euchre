@@ -17,8 +17,8 @@ func New() *Standard {
 	}
 
 	// Set default options
-	s.SetOption("stick_the_dealer", false)
-	s.SetOption("defend_alone", false)
+	_ = s.SetOption("stick_the_dealer", false)
+	_ = s.SetOption("defend_alone", false)
 
 	return s
 }

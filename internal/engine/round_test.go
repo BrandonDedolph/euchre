@@ -207,7 +207,7 @@ func TestRoundDiscard(t *testing.T) {
 	round.Deal(deck)
 
 	// Order up
-	round.ApplyAction(OrderUpAction{PlayerIdx: 1, Alone: false})
+	_ = round.ApplyAction(OrderUpAction{PlayerIdx: 1, Alone: false})
 
 	// Dealer discards
 	dealerHand := round.Hand(0)
@@ -238,7 +238,7 @@ func TestRoundCallTrump(t *testing.T) {
 
 	// All pass round 1
 	for i := 0; i < 4; i++ {
-		round.ApplyAction(PassAction{PlayerIdx: round.CurrentPlayer()})
+		_ = round.ApplyAction(PassAction{PlayerIdx: round.CurrentPlayer()})
 	}
 
 	// Find a different suit to call
@@ -272,7 +272,7 @@ func TestRoundCallTurnedSuitInvalid(t *testing.T) {
 
 	// All pass round 1
 	for i := 0; i < 4; i++ {
-		round.ApplyAction(PassAction{PlayerIdx: round.CurrentPlayer()})
+		_ = round.ApplyAction(PassAction{PlayerIdx: round.CurrentPlayer()})
 	}
 
 	// Try to call the turned suit (should fail)
@@ -289,9 +289,9 @@ func TestRoundPlayCard(t *testing.T) {
 	round.Deal(deck)
 
 	// Set up game to play phase
-	round.ApplyAction(OrderUpAction{PlayerIdx: 1, Alone: false})
+	_ = round.ApplyAction(OrderUpAction{PlayerIdx: 1, Alone: false})
 	dealerHand := round.Hand(0)
-	round.ApplyAction(DiscardAction{PlayerIdx: 0, Card: dealerHand[0]})
+	_ = round.ApplyAction(DiscardAction{PlayerIdx: 0, Card: dealerHand[0]})
 
 	// Now in play phase, player 1 leads (left of dealer)
 	if round.CurrentPlayer() != 1 {
@@ -379,8 +379,8 @@ func TestRoundResult(t *testing.T) {
 	round.Deal(deck)
 
 	// Quick setup to play phase
-	round.ApplyAction(OrderUpAction{PlayerIdx: 1, Alone: false})
-	round.ApplyAction(DiscardAction{PlayerIdx: 0, Card: round.Hand(0)[0]})
+	_ = round.ApplyAction(OrderUpAction{PlayerIdx: 1, Alone: false})
+	_ = round.ApplyAction(DiscardAction{PlayerIdx: 0, Card: round.Hand(0)[0]})
 
 	// Play 5 tricks (simplified - just play first legal card)
 	for trick := 0; trick < 5; trick++ {
@@ -395,7 +395,7 @@ func TestRoundResult(t *testing.T) {
 				actions := round.LegalActions()
 				for _, a := range actions {
 					if a.Type() == ActionPlayCard {
-						round.ApplyAction(a)
+						_ = round.ApplyAction(a)
 						break
 					}
 				}

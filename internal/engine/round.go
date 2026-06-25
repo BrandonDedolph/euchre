@@ -663,7 +663,7 @@ func (r *Round) LegalActions() []Action {
 
 	case PhaseBidRound2:
 		// Under stick-the-dealer the dealer cannot pass; they must name a suit.
-		if !(r.rules.StickTheDealer && player == r.dealer) {
+		if !r.rules.StickTheDealer || player != r.dealer {
 			actions = append(actions, PassAction{PlayerIdx: player})
 		}
 		// Can call any suit except the turned card's suit

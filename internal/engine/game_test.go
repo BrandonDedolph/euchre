@@ -74,8 +74,8 @@ func TestGameScoring(t *testing.T) {
 	game.StartRound()
 
 	// Set up to play phase by having player 1 order up
-	game.ApplyAction(OrderUpAction{PlayerIdx: game.CurrentPlayer(), Alone: false})
-	game.ApplyAction(DiscardAction{PlayerIdx: game.Dealer(), Card: game.Hand(game.Dealer())[0]})
+	_ = game.ApplyAction(OrderUpAction{PlayerIdx: game.CurrentPlayer(), Alone: false})
+	_ = game.ApplyAction(DiscardAction{PlayerIdx: game.Dealer(), Card: game.Hand(game.Dealer())[0]})
 
 	// Play through the round
 	for !game.NeedsNewRound() && !game.IsOver() {
@@ -86,7 +86,7 @@ func TestGameScoring(t *testing.T) {
 		actions := game.LegalActions()
 		if len(actions) > 0 {
 			// Just play the first legal action
-			game.ApplyAction(actions[0])
+			_ = game.ApplyAction(actions[0])
 		}
 	}
 
@@ -129,7 +129,7 @@ func TestGameDealerRotation(t *testing.T) {
 		if currentPlayer < 0 {
 			break
 		}
-		game.ApplyAction(firstNonPassAction(game.LegalActions()))
+		_ = game.ApplyAction(firstNonPassAction(game.LegalActions()))
 	}
 
 	// Dealer should rotate
@@ -170,7 +170,7 @@ func TestGameRoundHistory(t *testing.T) {
 		if currentPlayer < 0 {
 			break
 		}
-		game.ApplyAction(firstNonPassAction(game.LegalActions()))
+		_ = game.ApplyAction(firstNonPassAction(game.LegalActions()))
 	}
 
 	history = game.RoundHistory()
