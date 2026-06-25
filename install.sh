@@ -45,8 +45,11 @@ fi
 version="${EUCHRE_VERSION:-}"
 if [ -z "$version" ]; then
   info "Resolving latest release..."
-  version=$(dl "https://api.github.com/repos/$REPO/releases/latest" \
-    | grep -m1 '"tag_name"' | cut -d'"' -f4)
+  # Buffer the API response before grepping it: piping the downloader straight
+  # into `grep -m1` makes grep close the pipe on the first match, which the
+  # downloader reports as a (harmless) write failure.
+  api=$(dl "https://api.github.com/repos/$REPO/releases/latest")
+  version=$(printf '%s\n' "$api" | grep '"tag_name"' | head -n1 | cut -d'"' -f4)
   [ -n "$version" ] || err "could not determine latest version (no releases yet?)"
 fi
 # GoReleaser archive names drop the leading 'v'.
