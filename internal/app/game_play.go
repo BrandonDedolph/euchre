@@ -1656,11 +1656,10 @@ func (g *GamePlay) getPhaseMessage() string {
 
 // Hand-area geometry. The block is a constant height so the table above it
 // never shifts as per-phase controls appear and disappear:
-// verb tag(1) + header(name + sub-line = 2) + cards(7) + chip row(1) = 11.
+// header(name + sub-line = 2) + cards(7) + action row(1) = 10.
 const (
-	cardCellWidth  = components.HandCardWidth // a card column in components.RenderHand
-	arrowCellWidth = 3                        // gutter the ◄/► move arrows occupy beside the hand
-	handAreaHeight = 11                       // total reserved rows; see breakdown above
+	arrowCellWidth = 3  // gutter the ◄/► move arrows occupy beside the hand
+	handAreaHeight = 10 // total reserved rows; see breakdown above
 )
 
 // keyCap renders a control hint as a highlighted key glyph followed by a muted
@@ -1671,12 +1670,13 @@ func keyCap(key, label string) string {
 	return k + theme.Current.Muted.Render(" "+label)
 }
 
-// renderHandArea composes the diegetic control layer around the player's hand:
+// renderHandArea composes the diegetic control layer around the player's hand,
+// reading top-to-bottom as name → cards → action:
 //
-//	            ⏎ Play          verb tag over the raised card (play/discard)
 //	  You (2) DEALER            name + optional sub-line (suit selector / hint)
 //	◄ [ the hand of cards ] ►   move arrows when a card cursor is active
-//	   P Pass · A Alone         chip row for cursor-less choices (bidding, etc.)
+//	        ⏎ Play              action row: verb for the selected card, or the
+//	                            chip row for cursor-less choices (bidding, etc.)
 //
 // Every row is reserved (blank when unused) so the block stays handAreaHeight
 // tall and the table above never jumps between phases.
@@ -1714,33 +1714,21 @@ func (g *GamePlay) renderHandArea(playerName string, phase engine.GamePhase, isY
 			gutter(arrow("◄", selectedIdx > 0)), handCards,
 			gutter(arrow("►", selectedIdx < handLen-1)))
 	}
-	blockWidth := lipgloss.Width(handRow)
 
-	// Verb tag floats over the raised (selected) card during play/discard. It is
-	// left-padded to the selected card's column, so the whole block must be
-	// assembled left-aligned (the table centers it as a unit afterwards).
-	verbRow := ""
+	// Action row, directly under the cards: the verb for the selected card during
+	// play/discard, otherwise the cursor-less chip row (bidding/defend/ack). The
+	// two are mutually exclusive — you either have a card cursor or you don't — so
+	// they share one row, paired with the flanking arrows as a single cluster.
+	action := g.handChips(phase, isYourTurn)
 	if selectedIdx >= 0 {
-		verb := map[engine.GamePhase]string{engine.PhasePlay: "Play", engine.PhaseDiscard: "Discard"}[phase]
-		if verb != "" {
-			tag := keyCap("⏎", verb)
-			leftPad := selectedIdx * cardCellWidth
-			if arrowsShown {
-				leftPad += arrowCellWidth
-			}
-			leftPad += (cardCellWidth - lipgloss.Width(tag)) / 2 // nudge toward card center
-			if leftPad < 0 {
-				leftPad = 0
-			}
-			verbRow = strings.Repeat(" ", leftPad) + tag
+		if verb := map[engine.GamePhase]string{engine.PhasePlay: "Play", engine.PhaseDiscard: "Discard"}[phase]; verb != "" {
+			action = keyCap("⏎", verb)
 		}
 	}
 
-	// Center the header and chip row over the hand; the verb tag stays
-	// column-aligned. JoinVertical(Left) preserves the verb tag's left padding.
-	center := func(s string) string { return lipgloss.PlaceHorizontal(blockWidth, lipgloss.Center, s) }
-	return lipgloss.JoinVertical(lipgloss.Left,
-		verbRow, center(header), handRow, center(g.handChips(phase, isYourTurn)))
+	// Read top-to-bottom: name → cards → action. Everything is centered on the
+	// hand so the cluster stays visually anchored to the cards.
+	return lipgloss.JoinVertical(lipgloss.Center, header, handRow, action)
 }
 
 // handChips renders the cursor-less choices for the current state as a row of

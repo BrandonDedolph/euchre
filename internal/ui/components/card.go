@@ -22,11 +22,6 @@ const (
 	CardStyleTrickWinner // the card that won the just-completed trick - bold team-colored double border + ★
 )
 
-// HandCardWidth is the column width of a single card rendered by RenderHand
-// ("┌─────┐"). Exported so callers that overlay controls on the hand (e.g. the
-// play/discard verb tag) can align to a card column without re-hardcoding it.
-const HandCardWidth = 7
-
 // isCoachPick reports whether the style is the coach's recommended card.
 func (s CardStyle) isCoachPick() bool { return s == CardStyleCoachPick }
 
@@ -286,7 +281,7 @@ func RenderHand(cards []engine.Card, selectedIdx int, playableCards []engine.Car
 	// Render cards with raised effect for selected card, plus a marker row on
 	// top: a gold "▼" over the coach's pick, else a green "▾" over legal cards.
 	renderedCards := make([]string, len(cardViews))
-	cardWidth := HandCardWidth // width of a card "┌─────┐"
+	cardWidth := 7 // width of a card "┌─────┐"
 	emptyLine := strings.Repeat(" ", cardWidth)
 	legalMark := theme.Current.Success.Bold(true)
 	coachMark := lipgloss.NewStyle().Foreground(theme.ColGold).Bold(true)

@@ -56,9 +56,9 @@ func TestHandAreaConstantHeight(t *testing.T) {
 	}
 }
 
-// TestHandAreaVerbTag checks the action verb tags the raised card during play
-// and discard: it appears, sits on the top row, and is horizontally aligned with
-// the selected card's column.
+// TestHandAreaVerbTag checks the action verb for the selected card during play
+// and discard: it appears on the bottom row (below the cards), not floating up by
+// the player name, and is indented rather than flush-left (i.e. centered).
 func TestHandAreaVerbTag(t *testing.T) {
 	g := renderableGamePlay(t, false, fullLayoutWidth, 40)
 	hand := fiveCardHand()
@@ -77,14 +77,11 @@ func TestHandAreaVerbTag(t *testing.T) {
 		if verbPos.row < 0 {
 			t.Fatalf("%v: verb tag %q not rendered", tc.phase, tc.verb)
 		}
-		if verbPos.row != 0 {
-			t.Errorf("%v: verb tag on row %d, want top row 0", tc.phase, verbPos.row)
+		if lastRow := lipgloss.Height(area) - 1; verbPos.row != lastRow {
+			t.Errorf("%v: verb tag on row %d, want bottom row %d (below the cards)", tc.phase, verbPos.row, lastRow)
 		}
-		// The tag should sit roughly over the selected card. The card row starts
-		// with a one-cell arrow gutter, so card `sel` begins at arrow+sel*width.
-		cardCol := arrowCellWidth + sel*cardCellWidth
-		if verbPos.col < cardCol-1 || verbPos.col > cardCol+cardCellWidth {
-			t.Errorf("%v: verb tag at col %d, want near card column %d", tc.phase, verbPos.col, cardCol)
+		if verbPos.col == 0 {
+			t.Errorf("%v: verb tag is flush-left, want it centered under the hand", tc.phase)
 		}
 	}
 }
