@@ -1658,9 +1658,9 @@ func (g *GamePlay) getPhaseMessage() string {
 // never shifts as per-phase controls appear and disappear:
 // verb tag(1) + header(name + sub-line = 2) + cards(7) + chip row(1) = 11.
 const (
-	cardCellWidth  = 7  // matches a column width in components.RenderHand
-	arrowCellWidth = 3  // gutter the ◄/► move arrows occupy beside the hand
-	handAreaHeight = 11 // total reserved rows; see breakdown above
+	cardCellWidth  = components.HandCardWidth // a card column in components.RenderHand
+	arrowCellWidth = 3                        // gutter the ◄/► move arrows occupy beside the hand
+	handAreaHeight = 11                       // total reserved rows; see breakdown above
 )
 
 // keyCap renders a control hint as a highlighted key glyph followed by a muted
@@ -1740,13 +1740,13 @@ func (g *GamePlay) renderHandArea(playerName string, phase engine.GamePhase, isY
 	// column-aligned. JoinVertical(Left) preserves the verb tag's left padding.
 	center := func(s string) string { return lipgloss.PlaceHorizontal(blockWidth, lipgloss.Center, s) }
 	return lipgloss.JoinVertical(lipgloss.Left,
-		verbRow, center(header), handRow, center(g.handChips(isYourTurn)))
+		verbRow, center(header), handRow, center(g.handChips(phase, isYourTurn)))
 }
 
 // handChips renders the cursor-less choices for the current state as a row of
 // key caps (bidding, defend-alone, and the acknowledgement prompts). Play and
 // discard return "" — their controls are the arrows and verb tag on the hand.
-func (g *GamePlay) handChips(isYourTurn bool) string {
+func (g *GamePlay) handChips(phase engine.GamePhase, isYourTurn bool) string {
 	sep := theme.Current.Muted.Render("   ")
 	if g.waitingForRoundAck {
 		if g.game.IsOver() {
@@ -1760,7 +1760,7 @@ func (g *GamePlay) handChips(isYourTurn bool) string {
 	if !isYourTurn {
 		return ""
 	}
-	switch g.game.Phase() {
+	switch phase {
 	case engine.PhaseBidRound1:
 		return strings.Join([]string{keyCap("⏎", "Order up"), keyCap("P", "Pass"), keyCap("A", "Alone")}, sep)
 	case engine.PhaseBidRound2:
