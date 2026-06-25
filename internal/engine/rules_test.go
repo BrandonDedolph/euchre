@@ -58,7 +58,7 @@ func TestNonDealerCanStillPassUnderStickTheDealer(t *testing.T) {
 
 	// Round 1 all pass
 	for i := 0; i < 4; i++ {
-		round.ApplyAction(PassAction{PlayerIdx: round.CurrentPlayer()})
+		_ = round.ApplyAction(PassAction{PlayerIdx: round.CurrentPlayer()})
 	}
 	// Player 1 (non-dealer) should be able to pass in round 2
 	hasPass := false
@@ -159,10 +159,10 @@ func TestEndRoundMisdealDoesNotRotateOrScore(t *testing.T) {
 
 	// All players pass both rounds -> misdeal
 	for i := 0; i < 4; i++ {
-		game.ApplyAction(PassAction{PlayerIdx: game.CurrentPlayer()})
+		_ = game.ApplyAction(PassAction{PlayerIdx: game.CurrentPlayer()})
 	}
 	for i := 0; i < 4; i++ {
-		game.ApplyAction(PassAction{PlayerIdx: game.CurrentPlayer()})
+		_ = game.ApplyAction(PassAction{PlayerIdx: game.CurrentPlayer()})
 	}
 
 	if !round.IsMisdeal() {

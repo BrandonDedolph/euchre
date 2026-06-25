@@ -1086,32 +1086,6 @@ func (g *GamePlay) applyAIBidDecision(playerIdx int, decision engine.BidDecision
 	return nil
 }
 
-// selectBestTrump selects the best trump suit for the player
-func (g *GamePlay) selectBestTrump(hand []engine.Card, excludeSuit engine.Suit) engine.Suit {
-	bestSuit := engine.Clubs
-	bestCount := 0
-
-	for _, suit := range []engine.Suit{engine.Clubs, engine.Diamonds, engine.Hearts, engine.Spades} {
-		if suit == excludeSuit {
-			continue
-		}
-
-		count := 0
-		for _, card := range hand {
-			if card.Suit == suit || card.IsLeftBower(suit) {
-				count++
-			}
-		}
-
-		if count > bestCount {
-			bestCount = count
-			bestSuit = suit
-		}
-	}
-
-	return bestSuit
-}
-
 // firstLegalCardIndex returns the hand index of the first legal card the human
 // can play in the current trick. It returns 0 when not in the human's play turn
 // or when legality can't be determined (the caller's default selection).
