@@ -61,6 +61,7 @@ Pick **Interactive Tutorial** from the menu to play a genuine hand with a coach 
 | `p` | Pass (bidding) |
 | `a` | Order up / call alone |
 | `y` / `n` | Defend alone (when offered) |
+| `?` | Toggle the controls overlay (in game) |
 | `Esc` | Back / Quit |
 
 ## Euchre Basics
