@@ -12,7 +12,13 @@ A terminal-based Euchre card game with AI opponents and a built-in coach, built 
 
 Pick whichever is easiest — the game is a single self-contained binary with no runtime dependencies.
 
-**Download a prebuilt binary (no Go needed)**
+**One-line install (macOS / Linux, no Go needed)**
+```bash
+curl -fsSL https://raw.githubusercontent.com/BrandonDedolph/euchre/main/install.sh | sh
+```
+Downloads the right prebuilt binary for your OS/arch and drops it in your PATH. Set `EUCHRE_INSTALL_DIR` to choose where it lands.
+
+**Download a prebuilt binary manually**
 Grab the archive for your OS/arch from the [latest release](https://github.com/BrandonDedolph/euchre/releases/latest), extract it, and run `euchre`.
 
 **With Go installed (1.24+)**
